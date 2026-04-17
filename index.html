@@ -327,11 +327,132 @@ input.auto-field{background:var(--accent-light);color:var(--accent);font-weight:
   </div>
 </div>
 
+<!-- ═══ MODAL: Google Sheets 가져오기 ═══ -->
+<div class="modal-overlay" id="gsImportModal">
+  <div class="modal-inner" style="width:680px">
+    <div class="modal-header">
+      <div class="modal-title">📥 구글시트 → 앱 데이터 가져오기</div>
+      <button class="modal-close" onclick="closeModal('gsImportModal')">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:16px">
+
+      <!-- Apps Script 코드 -->
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span class="step-num">1</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">구글시트 Apps Script 코드 교체 (기존 코드 전체 삭제 후 아래 코드로 교체)</div>
+          <div class="code-box">function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // ── 내보내기 (앱 → 시트) ──
+    if (data.action === 'export') {
+      const sheet = ss.getSheetByName(data.sheet);
+      if (!sheet) return res('Sheet not found: ' + data.sheet);
+      sheet.clearContents();
+      if (data.rows && data.rows.length > 0) {
+        sheet.getRange(1,1,data.rows.length,data.rows[0].length)
+             .setValues(data.rows);
+        sheet.getRange(1,1,1,data.rows[0].length)
+             .setFontWeight('bold').setBackground('#E8F0FE');
+      }
+      return res('OK');
+    }
+
+    // ── 가져오기 (시트 → 앱) ──
+    if (data.action === 'import') {
+      const result = {};
+      const sheets = ['Tenants','Bills','Payments'];
+      sheets.forEach(name => {
+        const sheet = ss.getSheetByName(name);
+        if (!sheet) { result[name] = []; return; }
+        const rows = sheet.getDataRange().getValues();
+        result[name] = rows;
+      });
+      return res(JSON.stringify(result));
+    }
+
+  } catch(err) {
+    return res('Error: ' + err.message);
+  }
+}
+
+function doGet(e) {
+  return res('Rental Manager Sync API v2');
+}
+
+function res(msg) {
+  return ContentService
+    .createTextOutput(msg)
+    .setMimeType(ContentService.MimeType.TEXT);
+}</div>
+        </div>
+      </div>
+
+      <!-- 시트 양식 안내 -->
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span class="step-num">2</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">구글시트 양식 — 헤더 1행 + 데이터 입력</div>
+          <div style="font-size:12px;color:var(--text-secondary,#6A6860);margin-bottom:6px">Tenants 시트 헤더 (1행)</div>
+          <div class="code-box">코드 | 층 | 임차인명 | 연락처 | 계약시작 | 계약종료 | 상태 | 보증금 | 보증금비고 | 월세 | 부가세 | 관리비 | 관리비비고</div>
+          <div style="font-size:12px;color:var(--text-secondary,#6A6860);margin:8px 0 6px">Bills 시트 헤더 (1행)</div>
+          <div class="code-box">청구ID | 임차인 | 층 | 청구월 | 유형 | 월세 | 부가세 | 관리비 | 합계 | 입금액 | 미납금 | 상태 | 납부기한 | 비고</div>
+          <div style="font-size:12px;color:var(--text-secondary,#6A6860);margin:8px 0 6px">Payments 시트 헤더 (1행)</div>
+          <div class="code-box">입금ID | 임차인 | 청구ID | 입금일 | 입금액 | 비고</div>
+          <div class="info-box" style="margin-top:8px">헤더 순서를 반드시 위와 동일하게 맞춰주세요. 2행부터 실제 데이터를 입력합니다.</div>
+        </div>
+      </div>
+
+      <!-- 재배포 안내 -->
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span class="step-num">3</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">코드 변경 후 재배포 필수</div>
+          <div class="code-box">Apps Script → [배포] → [배포 관리]
+→ 연필(수정) 아이콘 → 버전: 새 버전 → [배포]
+(URL은 그대로 유지됨)</div>
+        </div>
+      </div>
+
+      <!-- 가져오기 실행 -->
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span class="step-num">4</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px">가져오기 실행</div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label class="form-label">임대인 선택 (가져온 데이터를 어느 임대인에 연결할지)</label>
+            <select id="import_landlord"></select>
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label class="form-label">가져올 항목</label>
+            <select id="import_scope">
+              <option value="all">전체 (임차인 + 청구 + 입금)</option>
+              <option value="tenants">임차인만</option>
+              <option value="bills">청구 내역만</option>
+              <option value="payments">입금 내역만</option>
+            </select>
+          </div>
+          <div class="warn-box">기존 데이터와 병합됩니다. 동일 코드(ID)가 있으면 덮어씁니다. 가져오기 전 CSV 백업을 권장합니다.</div>
+        </div>
+      </div>
+
+      <div id="import-result" style="display:none" class="success-box"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('gsImportModal')">닫기</button>
+      <button class="btn" onclick="exportToCSV()">백업 CSV 내보내기</button>
+      <button class="btn btn-gsheet" onclick="importFromGSheets()">📥 지금 가져오기</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ MODAL: Google Sheets 설정 ═══ -->
 <div class="modal-overlay" id="gsheetsModal">
   <div class="modal-inner" style="width:660px">
     <div class="modal-header">
-      <div class="modal-title">📊 Google Sheets 동기화 설정</div>
+      <div class="modal-title">📊 Google Sheets 연동</div>
       <button class="modal-close" onclick="closeModal('gsheetsModal')">✕</button>
     </div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:16px">
@@ -364,33 +485,38 @@ input.auto-field{background:var(--accent-light);color:var(--accent);font-weight:
   try {
     const data = JSON.parse(e.postData.contents);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheetByName(data.sheet);
-    if (!sheet) return res('Sheet not found: ' + data.sheet);
-    sheet.clearContents();
-    if (data.rows && data.rows.length > 0) {
-      sheet.getRange(1, 1, data.rows.length, data.rows[0].length)
-           .setValues(data.rows);
-      // 헤더 행 굵게
-      sheet.getRange(1, 1, 1, data.rows[0].length)
-           .setFontWeight('bold')
-           .setBackground('#E8F0FE');
+
+    if (data.action === 'export') {
+      const sheet = ss.getSheetByName(data.sheet);
+      if (!sheet) return res('Sheet not found: ' + data.sheet);
+      sheet.clearContents();
+      if (data.rows && data.rows.length > 0) {
+        sheet.getRange(1,1,data.rows.length,data.rows[0].length)
+             .setValues(data.rows);
+        sheet.getRange(1,1,1,data.rows[0].length)
+             .setFontWeight('bold').setBackground('#E8F0FE');
+      }
+      return res('OK');
     }
-    return res('OK');
+
+    if (data.action === 'import') {
+      const result = {};
+      ['Tenants','Bills','Payments'].forEach(name => {
+        const sheet = ss.getSheetByName(name);
+        result[name] = sheet ? sheet.getDataRange().getValues() : [];
+      });
+      return res(JSON.stringify(result));
+    }
+
   } catch(err) {
     return res('Error: ' + err.message);
   }
 }
-
-function doGet(e) {
-  return res('Google Sheets Sync API is running');
-}
-
+function doGet(e) { return res('Rental Sync API v2'); }
 function res(msg) {
-  return ContentService
-    .createTextOutput(msg)
+  return ContentService.createTextOutput(msg)
     .setMimeType(ContentService.MimeType.TEXT);
-}
-</div>
+}</div>
         </div>
       </div>
 
@@ -399,14 +525,10 @@ function res(msg) {
         <span class="step-num">3</span>
         <div style="flex:1">
           <div style="font-size:13px;font-weight:600;margin-bottom:6px">웹앱으로 배포</div>
-          <div class="code-box">1. Apps Script 편집기 상단 → [배포] → [새 배포]
-2. 유형 선택 → [웹 앱]
-3. 설명: rental-sync-v1
-4. 다음 사용자로 실행: 나 (본인 계정)
-5. 액세스 권한: 누구나 (익명 포함)
-6. [배포] 클릭
-7. 권한 승인 → Google 계정 로그인 → 허용
-8. 웹앱 URL 복사 (https://script.google.com/macros/s/.../exec)</div>
+          <div class="code-box">1. [배포] → [새 배포] → 유형: 웹 앱
+2. 다음 사용자로 실행: 나
+3. 액세스 권한: 누구나 (익명 포함)
+4. [배포] → 권한 승인 → URL 복사</div>
         </div>
       </div>
 
@@ -426,7 +548,7 @@ function res(msg) {
       <div style="display:flex;gap:10px;align-items:flex-start">
         <span class="step-num">5</span>
         <div style="flex:1">
-          <div style="font-size:13px;font-weight:600;margin-bottom:8px">자동 동기화 설정</div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px">자동 내보내기 설정</div>
           <div class="form-grid">
             <div class="form-group">
               <label class="form-label">자동 동기화</label>
@@ -448,15 +570,16 @@ function res(msg) {
       </div>
 
       <div class="info-box">
-        <strong>참고:</strong> 동기화는 이 앱 → 구글시트 단방향입니다. 구글시트의 수정은 이 앱에 반영되지 않습니다. 데이터 원본은 Firebase(또는 로컬)입니다.
+        이 설정은 <strong>앱 → 구글시트</strong> 내보내기용입니다.<br>
+        구글시트 데이터를 앱으로 가져오려면 아래 [📥 시트에서 가져오기] 버튼을 사용하세요.
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('gsheetsModal')">닫기</button>
-      <button class="btn" onclick="exportToCSV()">CSV 내보내기</button>
       <button class="btn" onclick="clearGSConfig()">연동 해제</button>
+      <button class="btn btn-gsheet" onclick="openGSImport()">📥 시트에서 가져오기</button>
       <button class="btn btn-gsheet" onclick="saveGSConfig()">저장 &amp; 테스트</button>
-      <button class="btn btn-gsheet" onclick="syncToGSheets(true)">📊 지금 동기화</button>
+      <button class="btn btn-gsheet" onclick="syncToGSheets(true)">📊 지금 내보내기</button>
     </div>
   </div>
 </div>
@@ -873,7 +996,8 @@ function res(msg) {
             <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
               <div id="settings-gs-status" class="fb-status-bar warn"><span>⚠</span> 미연결</div>
               <button class="btn btn-gsheet w-full" onclick="openModal('gsheetsModal')">📊 Google Sheets 설정</button>
-              <button class="btn w-full" onclick="syncToGSheets(true)">지금 동기화</button>
+              <button class="btn btn-gsheet w-full" onclick="openGSImport()">📥 시트에서 가져오기</button>
+              <button class="btn w-full" onclick="syncToGSheets(true)">지금 내보내기</button>
               <button class="btn w-full" onclick="exportToCSV()">CSV 전체 내보내기</button>
             </div>
           </div>
@@ -1239,7 +1363,133 @@ function buildPayRows(payments,tenants){
     ...payments.map(p=>{const t=tenants.find(x=>x.id===p.tid);return[p.id,t?t.name:'-',p.bid,p.date,p.amount,p.note||''];})];
 }
 
-function updateGSModalStatus(){
+function openGSImport(){
+  if(!GS.url){ showToast('먼저 Apps Script URL을 설정하세요.'); return; }
+  // 임대인 목록 채우기
+  const sel = document.getElementById('import_landlord');
+  sel.innerHTML = S.landlords.map((l,i)=>`<option value="${i}">${l.name}</option>`).join('');
+  document.getElementById('import-result').style.display='none';
+  closeModal('gsheetsModal');
+  openModal('gsImportModal');
+}
+
+async function importFromGSheets(){
+  if(!GS.url){ showToast('Apps Script URL을 먼저 설정하세요.'); return; }
+  const llIdx  = Number(document.getElementById('import_landlord').value);
+  const scope  = document.getElementById('import_scope').value;
+  const ll     = S.landlords[llIdx];
+  if(!ll){ showToast('임대인을 선택하세요.'); return; }
+
+  showLoading('구글시트에서 데이터 불러오는 중…');
+  try {
+    const res = await fetch(GS.url, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'import' }),
+      headers: { 'Content-Type': 'text/plain' }
+    });
+    const text = await res.text();
+    if(text.startsWith('Error')) throw new Error(text);
+
+    const data = JSON.parse(text);
+    let cntT=0, cntB=0, cntP=0;
+
+    // ── Tenants 가져오기 ──
+    if((scope==='all'||scope==='tenants') && data.Tenants && data.Tenants.length>1){
+      const rows = data.Tenants.slice(1); // 헤더 제외
+      rows.forEach(r=>{
+        if(!r[0]) return; // 코드 없으면 스킵
+        const tenant = {
+          id:           String(r[0]||'').trim(),
+          lid:          ll.id,
+          name:         String(r[2]||'').trim(),
+          floor:        String(r[1]||'').trim(),
+          phone:        String(r[3]||'').trim(),
+          address:      '',
+          contractStart:String(r[4]||'').trim(),
+          contractEnd:  String(r[5]||'').trim(),
+          status:       String(r[6]||'active').trim(),
+          deposit:      Number(r[7])||0,
+          depositNote:  String(r[8]||'').trim(),
+          rent:         Number(r[9])||0,
+          mgmt:         Number(r[11])||0,
+          mgmtNote:     String(r[12]||'').trim(),
+          histories:    []
+        };
+        const idx = S.tenants.findIndex(x=>x.id===tenant.id);
+        if(idx>=0) S.tenants[idx]=tenant; else S.tenants.push(tenant);
+        fbSet('tenants', tenant.id, tenant);
+        cntT++;
+      });
+    }
+
+    // ── Bills 가져오기 ──
+    if((scope==='all'||scope==='bills') && data.Bills && data.Bills.length>1){
+      const rows = data.Bills.slice(1);
+      rows.forEach(r=>{
+        if(!r[0]) return;
+        const bill = {
+          id:    String(r[0]||'').trim(),
+          lid:   ll.id,
+          tid:   '', // 임차인명으로 매칭
+          month: String(r[3]||'').trim(),
+          type:  String(r[4]||'monthly').trim(),
+          rent:  Number(r[5])||0,
+          vat:   Number(r[6])||0,
+          mgmt:  Number(r[7])||0,
+          total: Number(r[8])||0,
+          paid:  Number(r[9])||0,
+          due:   String(r[12]||'').trim(),
+          note:  String(r[13]||'').trim()
+        };
+        // 임차인명으로 tid 매칭
+        const tName = String(r[1]||'').trim();
+        const matched = S.tenants.find(t=>t.name===tName&&t.lid===ll.id);
+        if(matched) bill.tid = matched.id;
+        const idx = S.bills.findIndex(x=>x.id===bill.id);
+        if(idx>=0) S.bills[idx]=bill; else S.bills.push(bill);
+        fbSet('bills', bill.id, bill);
+        cntB++;
+      });
+    }
+
+    // ── Payments 가져오기 ──
+    if((scope==='all'||scope==='payments') && data.Payments && data.Payments.length>1){
+      const rows = data.Payments.slice(1);
+      rows.forEach(r=>{
+        if(!r[0]) return;
+        const pay = {
+          id:     String(r[0]||'').trim(),
+          lid:    ll.id,
+          tid:    '',
+          bid:    String(r[2]||'').trim(),
+          date:   String(r[3]||'').trim(),
+          amount: Number(r[4])||0,
+          note:   String(r[5]||'').trim()
+        };
+        const tName = String(r[1]||'').trim();
+        const matched = S.tenants.find(t=>t.name===tName&&t.lid===ll.id);
+        if(matched) pay.tid = matched.id;
+        const idx = S.payments.findIndex(x=>x.id===pay.id);
+        if(idx>=0) S.payments[idx]=pay; else S.payments.push(pay);
+        fbSet('payments', pay.id, pay);
+        cntP++;
+      });
+    }
+
+    hideLoading();
+    renderSidebar(); renderPage();
+
+    const resultEl = document.getElementById('import-result');
+    resultEl.style.display='block';
+    resultEl.textContent = `가져오기 완료 — 임차인 ${cntT}건 / 청구 ${cntB}건 / 입금 ${cntP}건 (${ll.name})`;
+    showToast(`📥 가져오기 완료 — 총 ${cntT+cntB+cntP}건`);
+
+  } catch(e){
+    hideLoading();
+    console.error('import error:', e);
+    showToast('가져오기 실패: ' + e.message + ' — Apps Script 재배포 여부를 확인하세요.');
+  }
+}
   const el=document.getElementById('gs-current-status');
   if(GS.url){
     el.className='fb-status-bar ok';
