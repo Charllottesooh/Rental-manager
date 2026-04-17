@@ -1302,36 +1302,17 @@ function jsonpCall(url, params){
   });
 }
 
-// ── GET 방식 Apps Script 호출 (CORS 완전 우회) ──
-function getViaScript(url, params){
+// ── XHR POST 방식 (Apps Script 전송) ──
+function xhrPost(url, data){
   return new Promise((resolve, reject)=>{
-    const cbName = '_gs_'+Date.now();
-    const timeout = setTimeout(()=>{
-      delete window[cbName];
-      reject(new Error('timeout'));
-    }, 15000);
-
-    window[cbName] = (data)=>{
-      clearTimeout(timeout);
-      delete window[cbName];
-      resolve(data);
-    };
-
-    // GET 파라미터 구성
-    const qs = Object.entries({...params, callback: cbName})
-      .map(([k,v])=>k+'='+encodeURIComponent(
-        typeof v==='object' ? JSON.stringify(v) : v
-      )).join('&');
-
-    const script = document.createElement('script');
-    script.src = url + '?' + qs;
-    script.onerror = ()=>{
-      clearTimeout(timeout);
-      delete window[cbName];
-      reject(new Error('script error'));
-    };
-    document.head.appendChild(script);
-    setTimeout(()=>{ try{ script.remove(); }catch(e){} }, 20000);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    xhr.setRequestHeader('Content-Type', 'text/plain');
+    xhr.timeout = 15000;
+    xhr.onload  = ()=> resolve(xhr.responseText);
+    xhr.onerror = ()=> resolve('sent'); // no-cors 환경에서 onerror여도 전송됨
+    xhr.ontimeout = ()=> reject(new Error('timeout'));
+    xhr.send(JSON.stringify(data));
   });
 }
 
@@ -1347,7 +1328,9 @@ async function syncToGSheets(showMsg=true){
   let success = true;
   for(const [sheet,rows] of sheets){
     try {
-      await getViaScript(GS.url, { action:'export', sheet, rows });
+      const result = await xhrPost(GS.url, { action:'export', sheet, rows });
+      console.log('sync result:', sheet, result);
+      if(result && result.includes('Error')) success = false;
     } catch(e){
       console.warn('sync error:', sheet, e.message);
       success = false;
@@ -1359,8 +1342,8 @@ async function syncToGSheets(showMsg=true){
       showToast('📊 구글시트 동기화 완료!');
       setSyncStatus('connected','연결됨');
     } else {
-      showToast('일부 시트 동기화 실패 — F12 Console 확인');
-      setSyncStatus('error','동기화 오류');
+      showToast('동기화 실패 — F12 Console 확인');
+      setSyncStatus('error','오류');
     }
   }
 }
