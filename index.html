@@ -1,0 +1,1864 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>임대료 관리 시스템 v3</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Firebase SDK v10 — app + database only -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+<style>
+:root {
+  --font: 'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  --bg:#F5F4F0; --surface:#FFFFFF; --surface2:#EEECEA;
+  --border:rgba(0,0,0,0.07); --border-md:rgba(0,0,0,0.13);
+  --text-primary:#18170F; --text-secondary:#6A6860; --text-muted:#AAA79F;
+  --accent:#2563EB; --accent-light:#EFF4FF; --accent-border:#BFCFEF;
+  --success:#16A34A; --success-bg:#F0FDF4;
+  --warning:#D97706; --warning-bg:#FFFBEB;
+  --danger:#DC2626; --danger-bg:#FEF2F2;
+  --firebase:#FF6F00; --firebase-bg:#FFF8E1;
+  --gsheet:#1a7340; --github:#24292e;
+  --nav-w:224px; --radius:10px; --radius-lg:14px;
+  --shadow:0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md:0 4px 16px rgba(0,0,0,0.10);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body,input,select,textarea,button,table,td,th,span,div,p,a{font-family:var(--font)!important;}
+body{background:var(--bg);color:var(--text-primary);font-size:14px;min-height:100vh;}
+.num,.num-sm{font-variant-numeric:tabular-nums;}
+
+/* ── Layout ── */
+.layout{display:flex;min-height:100vh;}
+.sidebar{width:var(--nav-w);background:#111110;position:fixed;top:0;left:0;height:100vh;display:flex;flex-direction:column;z-index:100;transition:transform .3s;}
+.main{margin-left:var(--nav-w);flex:1;display:flex;flex-direction:column;}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%);}
+  .sidebar.open{transform:translateX(0);}
+  .main{margin-left:0;}
+  .mobile-header{display:flex!important;}
+  .metric-grid{grid-template-columns:1fr 1fr!important;}
+  .modal-inner{width:95vw!important;max-height:90vh;overflow-y:auto;}
+}
+
+/* ── Sidebar landlord row (with edit/delete) ── */
+.sb-ll-row { display:flex; align-items:center; border-radius:8px; overflow:hidden; margin-bottom:2px; }
+.sb-ll-row:hover .sb-ll-action { opacity:1; }
+.sb-ll-action { flex-shrink:0; border:none; background:transparent; color:rgba(255,255,255,0.35); font-size:13px; width:26px; height:34px; cursor:pointer; transition:all .15s; opacity:0; display:flex; align-items:center; justify-content:center; }
+.sb-ll-action:hover { color:#fff; background:rgba(255,255,255,0.1); }
+
+/* ── Sidebar ── */
+.sb-logo{padding:22px 18px 16px;border-bottom:1px solid rgba(255,255,255,0.07);}
+.sb-logo-main{font-size:15px;font-weight:700;color:#fff;letter-spacing:-.3px;}
+.sb-logo-sub{font-size:11px;color:rgba(255,255,255,0.35);margin-top:2px;}
+.sb-sync-status{padding:8px 18px 0;display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(255,255,255,0.35);}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:#555;flex-shrink:0;transition:background .3s;}
+.sync-dot.connected{background:#22c55e;}
+.sync-dot.syncing{background:#f59e0b;animation:pulse .8s infinite;}
+.sync-dot.error{background:#ef4444;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+.sb-section-label{font-size:10px;font-weight:600;color:rgba(255,255,255,0.28);letter-spacing:.9px;text-transform:uppercase;padding:0 8px;margin-bottom:5px;}
+.sb-landlords{padding:14px 10px 6px;}
+.sb-landlord-btn{width:100%;text-align:left;padding:8px 12px;border-radius:8px;border:none;background:transparent;color:rgba(255,255,255,0.6);font-size:13px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:8px;}
+.sb-landlord-btn:hover{background:rgba(255,255,255,0.07);color:#fff;}
+.sb-landlord-btn.active{background:rgba(255,255,255,0.11);color:#fff;}
+.sb-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.sb-nav{padding:6px 10px;flex:1;}
+.sb-nav-item{width:100%;text-align:left;padding:8px 12px;border-radius:8px;border:none;background:transparent;color:rgba(255,255,255,0.5);font-size:13px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:10px;margin-bottom:2px;}
+.sb-nav-item:hover{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.85);}
+.sb-nav-item.active{background:rgba(37,99,235,0.28);color:#93C5FD;}
+.sb-nav-icon{width:16px;text-align:center;font-size:13px;}
+.sb-footer{padding:14px 10px;border-top:1px solid rgba(255,255,255,0.07);}
+.sb-user{display:flex;align-items:center;gap:8px;}
+.sb-avatar{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:rgba(255,255,255,0.65);}
+.sb-user-info{font-size:12px;color:rgba(255,255,255,0.4);}
+
+/* ── Mobile ── */
+.mobile-header{display:none;align-items:center;justify-content:space-between;padding:12px 16px;background:#111110;position:sticky;top:0;z-index:50;}
+.mobile-menu-btn{border:none;background:transparent;color:#fff;font-size:20px;cursor:pointer;padding:4px;}
+.mobile-title{font-size:14px;font-weight:600;color:#fff;}
+
+/* ── Page ── */
+.page-header{padding:24px 28px 18px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
+.page-title{font-size:19px;font-weight:700;letter-spacing:-.4px;}
+.page-sub{font-size:13px;color:var(--text-secondary);margin-top:2px;}
+.page-body{padding:22px 28px;flex:1;}
+@media(max-width:768px){.page-header{padding:14px 16px;}.page-body{padding:14px 16px;}}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 15px;border-radius:8px;border:1px solid var(--border-md);background:var(--surface);color:var(--text-primary);font-size:13px;cursor:pointer;transition:all .15s;font-weight:400;}
+.btn:hover{background:var(--surface2);}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+.btn-primary:hover{background:#1d4ed8;}
+.btn-sm{padding:5px 11px;font-size:12px;}
+.btn-danger{background:var(--danger-bg);color:var(--danger);border-color:#fca5a5;}
+.btn-firebase{background:var(--firebase);color:#fff;border-color:var(--firebase);}
+.btn-firebase:hover{background:#e65100;}
+.btn-gsheet{background:var(--gsheet);color:#fff;border-color:var(--gsheet);}
+.btn-gsheet:hover{background:#155c33;}
+.btn-github{background:var(--github);color:#fff;border-color:var(--github);}
+.btn-github:hover{background:#1a1e22;}
+
+/* ── Cards ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow);}
+.card-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+.card-title{font-size:14px;font-weight:600;}
+.card-body{padding:18px;}
+
+/* ── Metric grid ── */
+.metric-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-bottom:20px;}
+.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px;box-shadow:var(--shadow);}
+.metric-label{font-size:11px;color:var(--text-secondary);font-weight:500;margin-bottom:5px;}
+.metric-value{font-size:20px;font-weight:700;letter-spacing:-.3px;line-height:1.1;}
+.metric-sub{font-size:11px;color:var(--text-muted);margin-top:4px;}
+
+/* ── Table ── */
+.table-wrap{overflow-x:auto;}
+table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
+.data-table th{padding:9px 11px;background:var(--surface2);color:var(--text-secondary);font-weight:600;text-align:left;border-bottom:1px solid var(--border);font-size:12px;white-space:nowrap;}
+.data-table td{padding:10px 11px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.data-table tr:last-child td{border-bottom:none;}
+.data-table tr:hover td{background:#FAFAF8;}
+.data-table .num{text-align:right;font-size:13px;}
+.data-table .num-sm{text-align:right;font-size:12px;color:var(--text-secondary);}
+.subtotal-row td{background:#F5F4F0;font-weight:600;font-size:12px;color:var(--text-secondary);}
+
+/* ── Badges ── */
+.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap;}
+.badge-paid{background:var(--success-bg);color:var(--success);}
+.badge-unpaid{background:var(--danger-bg);color:var(--danger);}
+.badge-partial{background:var(--warning-bg);color:var(--warning);}
+.badge-blue{background:var(--accent-light);color:var(--accent);}
+.badge-gray{background:var(--surface2);color:var(--text-secondary);}
+.badge-firebase{background:var(--firebase-bg);color:var(--firebase);}
+
+/* ── Forms ── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;}
+.form-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px;}
+@media(max-width:600px){.form-grid,.form-grid-3{grid-template-columns:1fr;}}
+.form-group{display:flex;flex-direction:column;gap:5px;}
+.form-label{font-size:12px;font-weight:500;color:var(--text-secondary);}
+.form-label .req{color:var(--danger);margin-left:2px;}
+.form-label .auto-tag{font-size:10px;background:var(--accent-light);color:var(--accent);padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:400;}
+input,select,textarea{padding:8px 11px;border:1px solid var(--border-md);border-radius:8px;font-size:13px;background:var(--surface);color:var(--text-primary);width:100%;transition:border .15s;outline:none;}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,0.09);}
+input.auto-field{background:var(--accent-light);color:var(--accent);font-weight:500;}
+.form-section-title{grid-column:1/-1;font-size:12px;font-weight:600;color:var(--text-secondary);display:flex;align-items:center;gap:8px;padding-top:4px;}
+.form-section-title::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* ── Modal ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.42);z-index:200;display:none;align-items:center;justify-content:center;padding:16px;}
+.modal-overlay.show{display:flex;}
+.modal-inner{background:var(--surface);border-radius:var(--radius-lg);width:700px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.22);max-height:92vh;overflow-y:auto;}
+.modal-header{padding:18px 22px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--surface);z-index:1;}
+.modal-title{font-size:15px;font-weight:700;}
+.modal-close{border:none;background:var(--surface2);color:var(--text-secondary);width:28px;height:28px;border-radius:6px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.modal-body{padding:18px 22px;}
+.modal-footer{padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;}
+
+/* ── Segment tabs ── */
+.seg-bar{display:inline-flex;background:var(--surface2);border-radius:10px;padding:3px;margin-bottom:18px;}
+.seg-item{padding:7px 22px;border-radius:8px;border:none;background:transparent;font-size:13px;font-weight:500;color:var(--text-secondary);cursor:pointer;transition:all .15s;white-space:nowrap;}
+.seg-item.active{background:var(--surface);color:var(--text-primary);font-weight:700;box-shadow:var(--shadow);}
+
+/* ── Progress ── */
+.progress-wrap{background:var(--surface2);border-radius:4px;height:6px;overflow:hidden;}
+.progress-bar{height:100%;border-radius:4px;transition:width .5s;}
+
+/* ── Misc ── */
+.floor-badge{display:inline-block;min-width:34px;height:24px;border-radius:6px;background:var(--surface2);text-align:center;line-height:24px;font-size:12px;font-weight:600;color:var(--text-secondary);padding:0 6px;}
+.history-tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:10px;background:var(--warning-bg);color:var(--warning);border:1px solid #fde68a;}
+.info-box{background:var(--accent-light);border:1px solid var(--accent-border);border-radius:var(--radius);padding:11px 14px;font-size:12px;color:#1e40af;line-height:1.65;}
+.warn-box{background:var(--warning-bg);border:1px solid #fde68a;border-radius:var(--radius);padding:11px 14px;font-size:12px;color:#92400e;line-height:1.65;}
+.success-box{background:var(--success-bg);border:1px solid #86efac;border-radius:var(--radius);padding:11px 14px;font-size:12px;color:#14532d;line-height:1.65;}
+.code-box{background:#1e1e2e;color:#cdd6f4;border-radius:var(--radius);padding:14px 16px;font-size:12px;line-height:1.7;overflow-x:auto;white-space:pre;font-family:'Courier New',monospace!important;}
+.step-num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:700;flex-shrink:0;}
+
+/* ── Firebase status bar ── */
+.fb-status-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--radius);border:1px solid;font-size:12px;margin-bottom:14px;}
+.fb-status-bar.ok{background:var(--success-bg);border-color:#86efac;color:#14532d;}
+.fb-status-bar.warn{background:var(--firebase-bg);border-color:#fbbf24;color:#78350f;}
+.fb-status-bar.err{background:var(--danger-bg);border-color:#fca5a5;color:#7f1d1d;}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:22px;right:22px;background:#111110;color:#fff;padding:11px 17px;border-radius:10px;font-size:13px;box-shadow:var(--shadow-md);transform:translateY(70px);opacity:0;transition:all .28s;z-index:999;max-width:320px;}
+.toast.show{transform:translateY(0);opacity:1;}
+
+/* ── Overlay ── */
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.38);z-index:99;}
+.sb-overlay.show{display:block;}
+
+/* ── Loading overlay ── */
+.loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,0.85);z-index:500;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;}
+.loading-overlay.show{display:flex;}
+.loading-spinner{width:36px;height:36px;border:3px solid var(--surface2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── Util ── */
+.flex{display:flex;}.items-center{align-items:center;}.gap-8{gap:8px;}.gap-12{gap:12px;}
+.justify-between{justify-content:space-between;}.flex-wrap{flex-wrap:wrap;}.ml-auto{margin-left:auto;}
+.mb-12{margin-bottom:12px;}.mb-16{margin-bottom:16px;}.mb-20{margin-bottom:20px;}
+.text-sm{font-size:12px;}.text-muted{color:var(--text-muted);}.font-bold{font-weight:700;}.w-full{width:100%;}
+.col-danger{color:var(--danger);}.col-success{color:var(--success);}.col-warning{color:var(--warning);}
+</style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div style="font-size:13px;color:var(--text-secondary)" id="loadingMsg">데이터 불러오는 중…</div>
+</div>
+
+<div class="sb-overlay" id="sbOverlay" onclick="closeSidebar()"></div>
+<div class="toast" id="toast"></div>
+
+<!-- ═══ MODAL: Firebase 설정 ═══ -->
+<div class="modal-overlay" id="firebaseModal">
+  <div class="modal-inner" style="width:660px">
+    <div class="modal-header">
+      <div class="modal-title">🔥 Firebase 연동 설정</div>
+      <button class="modal-close" onclick="closeModal('firebaseModal')">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:16px">
+
+      <!-- 현재 상태 -->
+      <div id="fb-current-status" class="fb-status-bar warn">
+        <span>⚠</span> Firebase 미연결 — 로컬 데이터만 사용 중 (새로고침 시 초기화)
+      </div>
+
+      <!-- STEP 1 -->
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span class="step-num">1</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">Firebase 프로젝트 생성</div>
+          <div class="code-box">1. console.firebase.google.com 접속
+2. [프로젝트 추가] → 이름: rental-manager
+3. Google Analytics 비활성화 (선택)
+4. [프로젝트 만들기]</div>
+        </div>
+      </div>
+
+      <!-- STEP 2 -->
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span class="step-num">2</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">Realtime Database 활성화</div>
+          <div class="code-box">1. 좌측 메뉴 → [빌드] → [Realtime Database]
+2. [데이터베이스 만들기] → 지역: asia-southeast1
+3. 보안 규칙: [테스트 모드] 선택 후 시작
+   (30일 후 아래 규칙으로 교체 필요)
+
+   보안 규칙 예시:
+   {
+     "rules": {
+       ".read": "auth != null",
+       ".write": "auth != null"
+     }
+   }</div>
+        </div>
+      </div>
+
+      <!-- STEP 3 -->
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span class="step-num">3</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">웹 앱 등록 → Firebase Config 복사</div>
+          <div class="code-box">1. 프로젝트 개요 → [앱 추가] → [웹(&lt;/&gt;)]
+2. 앱 닉네임: rental-web
+3. [앱 등록] → firebaseConfig 복사
+
+   예시:
+   const firebaseConfig = {
+     apiKey: "AIzaSy...",
+     authDomain: "rental-xxx.firebaseapp.com",
+     databaseURL: "https://rental-xxx-default-rtdb.asia-southeast1...",
+     projectId: "rental-xxx",
+     storageBucket: "rental-xxx.appspot.com",
+     messagingSenderId: "123456789",
+     appId: "1:123:web:abc..."
+   };</div>
+        </div>
+      </div>
+
+      <!-- STEP 4 — Config 입력 -->
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span class="step-num">4</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px">Firebase Config 입력 (복사한 값 붙여넣기)</div>
+          <div class="form-grid">
+            <div class="form-group" style="grid-column:span 2">
+              <label class="form-label">API Key</label>
+              <input id="fb_apiKey" placeholder="AIzaSy...">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Auth Domain</label>
+              <input id="fb_authDomain" placeholder="rental-xxx.firebaseapp.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Database URL <span class="req">*</span></label>
+              <input id="fb_databaseURL" placeholder="https://rental-xxx-default-rtdb.asia-southeast1.firebasedatabase.app">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Project ID</label>
+              <input id="fb_projectId" placeholder="rental-xxx">
+            </div>
+            <div class="form-group">
+              <label class="form-label">App ID</label>
+              <input id="fb_appId" placeholder="1:123:web:abc...">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="warn-box">
+        <strong>주의:</strong> Database URL이 가장 중요합니다. 반드시 <code style="background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:3px">https://</code>로 시작하는 전체 URL을 입력하세요.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('firebaseModal')">닫기</button>
+      <button class="btn" onclick="clearFirebaseConfig()">연동 해제</button>
+      <button class="btn btn-firebase" onclick="saveFirebaseConfig()">🔥 연동 저장 &amp; 연결</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: Google Sheets 설정 ═══ -->
+<div class="modal-overlay" id="gsheetsModal">
+  <div class="modal-inner" style="width:660px">
+    <div class="modal-header">
+      <div class="modal-title">📊 Google Sheets 동기화 설정</div>
+      <button class="modal-close" onclick="closeModal('gsheetsModal')">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:16px">
+
+      <div id="gs-current-status" class="fb-status-bar warn">
+        <span>⚠</span> Google Sheets 미연결 — Apps Script URL 미설정
+      </div>
+
+      <!-- STEP 1 -->
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span class="step-num">1</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">Google Sheets 준비</div>
+          <div class="code-box">1. sheets.google.com → 새 스프레드시트 생성
+2. 파일명: 임대료관리_동기화
+3. 하단 시트 탭 3개 생성:
+   - Tenants   (임차인 정보)
+   - Bills     (청구 내역)
+   - Payments  (입금 내역)
+4. 확장 프로그램 → Apps Script 클릭</div>
+        </div>
+      </div>
+
+      <!-- STEP 2 -->
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span class="step-num">2</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">Apps Script 코드 (전체 복사 후 붙여넣기)</div>
+          <div class="code-box">function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(data.sheet);
+    if (!sheet) return res('Sheet not found: ' + data.sheet);
+    sheet.clearContents();
+    if (data.rows && data.rows.length > 0) {
+      sheet.getRange(1, 1, data.rows.length, data.rows[0].length)
+           .setValues(data.rows);
+      // 헤더 행 굵게
+      sheet.getRange(1, 1, 1, data.rows[0].length)
+           .setFontWeight('bold')
+           .setBackground('#E8F0FE');
+    }
+    return res('OK');
+  } catch(err) {
+    return res('Error: ' + err.message);
+  }
+}
+
+function doGet(e) {
+  return res('Google Sheets Sync API is running');
+}
+
+function res(msg) {
+  return ContentService
+    .createTextOutput(msg)
+    .setMimeType(ContentService.MimeType.TEXT);
+}
+</div>
+        </div>
+      </div>
+
+      <!-- STEP 3 -->
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span class="step-num">3</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">웹앱으로 배포</div>
+          <div class="code-box">1. Apps Script 편집기 상단 → [배포] → [새 배포]
+2. 유형 선택 → [웹 앱]
+3. 설명: rental-sync-v1
+4. 다음 사용자로 실행: 나 (본인 계정)
+5. 액세스 권한: 누구나 (익명 포함)
+6. [배포] 클릭
+7. 권한 승인 → Google 계정 로그인 → 허용
+8. 웹앱 URL 복사 (https://script.google.com/macros/s/.../exec)</div>
+        </div>
+      </div>
+
+      <!-- STEP 4 — URL 입력 -->
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span class="step-num">4</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px">웹앱 URL 입력</div>
+          <div class="form-group">
+            <label class="form-label">Apps Script 웹앱 URL <span class="req">*</span></label>
+            <input id="gs_url" placeholder="https://script.google.com/macros/s/…/exec" style="font-size:12px">
+          </div>
+        </div>
+      </div>
+
+      <!-- 동기화 옵션 -->
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span class="step-num">5</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px">자동 동기화 설정</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">자동 동기화</label>
+              <select id="gs_auto">
+                <option value="off">수동 (버튼 클릭 시)</option>
+                <option value="save">저장 시 자동</option>
+                <option value="interval">주기적 (5분)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">동기화 범위</label>
+              <select id="gs_scope">
+                <option value="all">전체 (임차인+청구+입금)</option>
+                <option value="bills">청구+입금만</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-box">
+        <strong>참고:</strong> 동기화는 이 앱 → 구글시트 단방향입니다. 구글시트의 수정은 이 앱에 반영되지 않습니다. 데이터 원본은 Firebase(또는 로컬)입니다.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('gsheetsModal')">닫기</button>
+      <button class="btn" onclick="exportToCSV()">CSV 내보내기</button>
+      <button class="btn" onclick="clearGSConfig()">연동 해제</button>
+      <button class="btn btn-gsheet" onclick="saveGSConfig()">저장 &amp; 테스트</button>
+      <button class="btn btn-gsheet" onclick="syncToGSheets(true)">📊 지금 동기화</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: 임차인 등록/수정 ═══ -->
+<div class="modal-overlay" id="tenantModal">
+  <div class="modal-inner">
+    <div class="modal-header">
+      <div class="modal-title" id="tenantModalTitle">임차인 등록</div>
+      <button class="modal-close" onclick="closeModal('tenantModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid-3">
+        <div class="form-group"><label class="form-label">임차인 코드 <span class="auto-tag">자동</span></label><input class="auto-field" id="f_code" readonly></div>
+        <div class="form-group"><label class="form-label">임차인명 <span class="req">*</span></label><input id="f_name" placeholder="홍길동 / (주)ABC"></div>
+        <div class="form-group"><label class="form-label">층수 <span class="req">*</span></label><input id="f_floor" placeholder="3층"></div>
+        <div class="form-group"><label class="form-label">연락처</label><input id="f_phone" placeholder="010-0000-0000"></div>
+        <div class="form-group" style="grid-column:span 2"><label class="form-label">주소</label><input id="f_address" placeholder="서울 마포구…"></div>
+        <div class="form-section-title">계약 정보</div>
+        <div class="form-group"><label class="form-label">계약 시작일 <span class="req">*</span></label><input type="date" id="f_start"></div>
+        <div class="form-group"><label class="form-label">계약 종료일 <span class="req">*</span></label><input type="date" id="f_end"></div>
+        <div class="form-group"><label class="form-label">계약 상태</label><select id="f_status"><option value="active">계약중</option><option value="expired">만료</option><option value="pending">대기</option></select></div>
+        <div class="form-section-title">보증금</div>
+        <div class="form-group"><label class="form-label">보증금 (원)</label><input type="number" id="f_deposit" placeholder="10000000"></div>
+        <div class="form-group" style="grid-column:span 2"><label class="form-label">보증금 비고</label><input id="f_deposit_note" placeholder="예: 전세전환, 분납 완료 등"></div>
+        <div class="form-section-title">월세 (과세)</div>
+        <div class="form-group"><label class="form-label">월세 (원, 부가세 별도) <span class="req">*</span></label><input type="number" id="f_rent" placeholder="1000000" oninput="calcTax()"></div>
+        <div class="form-group"><label class="form-label">부가세 10% <span class="auto-tag">자동</span></label><input class="auto-field" id="f_vat" readonly></div>
+        <div class="form-group"><label class="form-label">월세 합계 <span class="auto-tag">자동</span></label><input class="auto-field" id="f_rent_total" readonly></div>
+        <div class="form-section-title">관리비 (면세)</div>
+        <div class="form-group"><label class="form-label">관리비 (원) <span class="req">*</span></label><input type="number" id="f_mgmt" placeholder="150000"></div>
+        <div class="form-group" style="grid-column:span 2"><label class="form-label">관리비 비고</label><input id="f_mgmt_note" placeholder="포함 항목 등"></div>
+        <div class="form-section-title">계약 변경 이력</div>
+        <div style="grid-column:span 3">
+          <div id="contractHistory" style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">등록된 변경 이력 없음</div>
+          <button class="btn btn-sm" type="button" onclick="addContractHistory()">+ 변경 이력 추가</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('tenantModal')">취소</button>
+      <button class="btn btn-primary" onclick="saveTenant()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: 계약 변경 이력 ═══ -->
+<div class="modal-overlay" id="historyModal">
+  <div class="modal-inner" style="width:480px">
+    <div class="modal-header">
+      <div class="modal-title">계약 변경 이력 추가</div>
+      <button class="modal-close" onclick="closeModal('historyModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">변경 적용일 <span class="req">*</span></label><input type="date" id="h_date"></div>
+        <div class="form-group"><label class="form-label">변경 유형</label><select id="h_type"><option value="contract">계약기간 변경</option><option value="rent">월세 변경</option><option value="mgmt">관리비 변경</option><option value="all">전체 변경</option></select></div>
+        <div class="form-group"><label class="form-label">새 계약 시작일</label><input type="date" id="h_new_start"></div>
+        <div class="form-group"><label class="form-label">새 계약 종료일</label><input type="date" id="h_new_end"></div>
+        <div class="form-group"><label class="form-label">새 월세 (원)</label><input type="number" id="h_new_rent" placeholder="변경 없으면 비워두기"></div>
+        <div class="form-group"><label class="form-label">새 관리비 (원)</label><input type="number" id="h_new_mgmt" placeholder="변경 없으면 비워두기"></div>
+        <div class="form-group" style="grid-column:span 2"><label class="form-label">변경 사유</label><input id="h_reason" placeholder="재계약, 협의 등"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('historyModal')">취소</button>
+      <button class="btn btn-primary" onclick="saveContractHistory()">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: 입금 입력 ═══ -->
+<div class="modal-overlay" id="paymentModal">
+  <div class="modal-inner" style="width:480px">
+    <div class="modal-header">
+      <div class="modal-title">입금 내역 입력</div>
+      <button class="modal-close" onclick="closeModal('paymentModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">입금일 <span class="req">*</span></label><input type="date" id="p_date"></div>
+        <div class="form-group"><label class="form-label">임차인 <span class="req">*</span></label><select id="p_tenant"></select></div>
+        <div class="form-group"><label class="form-label">청구월 <span class="req">*</span></label><select id="p_bill"></select></div>
+        <div class="form-group"><label class="form-label">입금액 (원) <span class="req">*</span></label><input type="number" id="p_amount" placeholder="0"></div>
+        <div class="form-group" style="grid-column:span 2"><label class="form-label">비고</label><input id="p_note" placeholder="분납 1차, 일부기간 등"></div>
+      </div>
+      <div class="info-box" style="margin-top:12px">일부 기간·분납의 경우 실제 입금액 입력 → 미납금 자동 산정</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('paymentModal')">취소</button>
+      <button class="btn btn-primary" onclick="savePayment()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: 청구 생성 ═══ -->
+<div class="modal-overlay" id="billModal">
+  <div class="modal-inner" style="width:540px">
+    <div class="modal-header">
+      <div class="modal-title">청구 생성</div>
+      <button class="modal-close" onclick="closeModal('billModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">임차인 <span class="req">*</span></label><select id="b_tenant" onchange="fillBillDefaults()"></select></div>
+        <div class="form-group"><label class="form-label">청구 유형</label><select id="b_type"><option value="monthly">정기 월청구</option><option value="partial">일부 기간 청구</option></select></div>
+        <div class="form-group"><label class="form-label">청구년월 <span class="req">*</span></label><input type="month" id="b_month"></div>
+        <div class="form-group"><label class="form-label">납부기한</label><input type="date" id="b_due"></div>
+        <div class="form-group"><label class="form-label">월세 (원)</label><input type="number" id="b_rent" oninput="calcBillTotal()"></div>
+        <div class="form-group"><label class="form-label">부가세 10% <span class="auto-tag">자동</span></label><input class="auto-field" id="b_vat" readonly></div>
+        <div class="form-group"><label class="form-label">관리비 (원)</label><input type="number" id="b_mgmt" oninput="calcBillTotal()"></div>
+        <div class="form-group"><label class="form-label">합계 <span class="auto-tag">자동</span></label><input class="auto-field" id="b_total" readonly></div>
+        <div class="form-group" style="grid-column:span 2"><label class="form-label">비고</label><input id="b_note" placeholder="예: 4/1~4/15 일할계산 등"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('billModal')">취소</button>
+      <button class="btn btn-primary" onclick="saveBill()">청구 생성</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: 임대인 등록/수정 ═══ -->
+<div class="modal-overlay" id="landlordModal">
+  <div class="modal-inner" style="width:480px">
+    <div class="modal-header">
+      <div class="modal-title" id="landlordModalTitle">임대인 등록</div>
+      <button class="modal-close" onclick="closeModal('landlordModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid" style="gap:14px">
+        <div class="form-group" style="grid-column:span 2">
+          <label class="form-label">임대인 / 건물명 <span class="req">*</span></label>
+          <input id="ll_name" placeholder="예: (주)한강빌딩, 서초오피스텔">
+        </div>
+        <div class="form-group">
+          <label class="form-label">사업자등록번호</label>
+          <input id="ll_bizno" placeholder="000-00-00000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">대표자명</label>
+          <input id="ll_owner" placeholder="홍길동">
+        </div>
+        <div class="form-group">
+          <label class="form-label">연락처</label>
+          <input id="ll_phone" placeholder="02-0000-0000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">이메일</label>
+          <input id="ll_email" placeholder="contact@example.com">
+        </div>
+        <div class="form-group" style="grid-column:span 2">
+          <label class="form-label">건물 주소</label>
+          <input id="ll_address" placeholder="서울 마포구 서강로 10">
+        </div>
+        <div class="form-group" style="grid-column:span 2">
+          <label class="form-label">은행 / 계좌번호 (임대료 수납 계좌)</label>
+          <input id="ll_account" placeholder="예: 국민은행 123-456-789012 (주)한강빌딩">
+        </div>
+        <div class="form-group">
+          <label class="form-label">표시 색상</label>
+          <select id="ll_color">
+            <option value="#3B82F6">파랑</option>
+            <option value="#10B981">초록</option>
+            <option value="#F59E0B">노랑</option>
+            <option value="#EF4444">빨강</option>
+            <option value="#8B5CF6">보라</option>
+            <option value="#EC4899">핑크</option>
+            <option value="#06B6D4">하늘</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">비고</label>
+          <input id="ll_note" placeholder="기타 메모">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('landlordModal')">취소</button>
+      <button class="btn btn-primary" onclick="saveLandlord()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ LAYOUT ════════════════ -->
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-logo">
+      <div class="sb-logo-main">임대료 관리 시스템</div>
+      <div class="sb-logo-sub">Rental Manager v3.0</div>
+    </div>
+    <div class="sb-sync-status">
+      <span class="sync-dot" id="syncDot"></span>
+      <span id="syncLabel">초기화 중…</span>
+    </div>
+    <div class="sb-landlords">
+      <div class="sb-section-label">임대인</div>
+      <div id="landlordList"></div>
+      <button class="sb-landlord-btn" style="font-size:12px;color:rgba(255,255,255,0.3);margin-top:4px" onclick="openLandlordModal()">＋ 임대인 추가</button>
+    </div>
+    <div class="sb-nav">
+      <div class="sb-section-label" style="margin-top:8px">메뉴</div>
+      <button class="sb-nav-item active" onclick="navigate('dashboard')" id="nav-dashboard"><span class="sb-nav-icon">▦</span>대시보드</button>
+      <button class="sb-nav-item" onclick="navigate('tenants')"   id="nav-tenants"><span class="sb-nav-icon">👤</span>임차인 관리</button>
+      <button class="sb-nav-item" onclick="navigate('bills')"     id="nav-bills"><span class="sb-nav-icon">📄</span>청구 관리</button>
+      <button class="sb-nav-item" onclick="navigate('payments')"  id="nav-payments"><span class="sb-nav-icon">💳</span>입금 내역</button>
+      <button class="sb-nav-item" onclick="navigate('unpaid')"    id="nav-unpaid"><span class="sb-nav-icon">⚠</span>미납 현황</button>
+      <button class="sb-nav-item" onclick="navigate('settings')"  id="nav-settings"><span class="sb-nav-icon">⚙</span>설정 / 공유</button>
+    </div>
+    <div class="sb-footer">
+      <div class="sb-user"><div class="sb-avatar">관</div><div class="sb-user-info" id="sbUserLabel">관리자</div></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="mobile-header">
+      <button class="mobile-menu-btn" onclick="openSidebar()">☰</button>
+      <span class="mobile-title">임대료 관리</span>
+      <span style="width:32px"></span>
+    </div>
+
+    <!-- ══ 대시보드 ══ -->
+    <div id="page-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="page-title" id="dash-title">대시보드</div>
+          <div class="page-sub" id="dash-date"></div>
+        </div>
+        <div class="flex gap-8 flex-wrap">
+          <button class="btn btn-sm btn-firebase" onclick="openModal('firebaseModal')">🔥 Firebase</button>
+          <button class="btn btn-sm btn-gsheet" onclick="openModal('gsheetsModal')">📊 시트 동기화</button>
+          <button class="btn btn-primary btn-sm" onclick="openBillModal()">+ 청구 생성</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="metric-grid" id="dashMetrics"></div>
+        <div class="seg-bar">
+          <button class="seg-item active" id="seg-summary" onclick="switchDashTab('summary')">요약 현황</button>
+          <button class="seg-item"        id="seg-detail"  onclick="switchDashTab('detail')">층별 상세 현황</button>
+        </div>
+        <!-- 요약 -->
+        <div id="dash-summary">
+          <div class="flex flex-wrap mb-20" style="gap:18px;margin-bottom:18px">
+            <div class="card" style="flex:2;min-width:280px">
+              <div class="card-header">
+                <div class="card-title">층별 현황</div>
+                <span class="badge badge-blue" id="dash-month-badge"></span>
+              </div>
+              <div class="card-body" style="padding:0">
+                <div class="table-wrap">
+                  <table class="data-table">
+                    <thead><tr><th>층</th><th>임차인</th><th>계약기간</th><th class="num">청구합계</th><th class="num">입금액</th><th class="num">미납금</th><th>상태</th></tr></thead>
+                    <tbody id="floorTableBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <div class="card" style="flex:1;min-width:200px">
+              <div class="card-header"><div class="card-title">수납률</div></div>
+              <div class="card-body"><div id="collectionRateChart"></div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">최근 입금 내역</div>
+              <button class="btn btn-sm" onclick="navigate('payments')">전체보기</button>
+            </div>
+            <div class="card-body" style="padding:0">
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead><tr><th>입금일</th><th>임차인</th><th>청구월</th><th class="num">입금액</th><th>비고</th></tr></thead>
+                  <tbody id="recentPayments"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- 상세 -->
+        <div id="dash-detail" style="display:none">
+          <div class="flex items-center flex-wrap gap-8 mb-16" style="margin-bottom:14px">
+            <label style="font-size:13px;color:var(--text-secondary)">조회월</label>
+            <input type="month" id="detailMonth" style="width:140px" onchange="renderDetailTable()">
+            <button class="btn btn-sm" style="margin-left:auto" onclick="exportDetailCSV()">CSV 내보내기</button>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">임차인별 · 월별 청구 상세 내역</div>
+              <span class="badge badge-gray" id="detail-period-badge"></span>
+            </div>
+            <div class="card-body" style="padding:0">
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead><tr><th>층</th><th>임차인</th><th>청구월</th><th>유형</th><th class="num">월세</th><th class="num-sm">부가세</th><th class="num">관리비</th><th class="num">청구합계</th><th class="num">입금액</th><th class="num">미납금</th><th>납부기한</th><th>상태</th><th>비고</th></tr></thead>
+                  <tbody id="detailTableBody"></tbody>
+                  <tfoot id="detailTableFoot"></tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ 임차인 관리 ══ -->
+    <div id="page-tenants" style="display:none">
+      <div class="page-header">
+        <div><div class="page-title">임차인 관리</div><div class="page-sub" id="tenant-landlord-sub"></div></div>
+        <button class="btn btn-primary btn-sm" onclick="openTenantModal()">+ 임차인 등록</button>
+      </div>
+      <div class="page-body">
+        <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>코드</th><th>층</th><th>임차인명</th><th>연락처</th><th>계약기간</th><th class="num">월세</th><th class="num-sm">부가세</th><th class="num">관리비</th><th class="num">보증금</th><th>상태</th><th>관리</th></tr></thead>
+            <tbody id="tenantTableBody"></tbody>
+          </table>
+        </div></div></div>
+      </div>
+    </div>
+
+    <!-- ══ 청구 관리 ══ -->
+    <div id="page-bills" style="display:none">
+      <div class="page-header">
+        <div><div class="page-title">청구 관리</div><div class="page-sub">월세 + 관리비 청구 생성 및 조회</div></div>
+        <div class="flex gap-8">
+          <input type="month" id="billFilterMonth" onchange="renderBills()" style="width:145px">
+          <button class="btn btn-primary btn-sm" onclick="openBillModal()">+ 청구 생성</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>청구월</th><th>임차인</th><th>유형</th><th class="num">월세</th><th class="num-sm">부가세</th><th class="num">관리비</th><th class="num">합계</th><th class="num">입금액</th><th class="num">미납금</th><th>상태</th><th>비고</th></tr></thead>
+            <tbody id="billTableBody"></tbody>
+            <tfoot id="billTableFoot"></tfoot>
+          </table>
+        </div></div></div>
+      </div>
+    </div>
+
+    <!-- ══ 입금 내역 ══ -->
+    <div id="page-payments" style="display:none">
+      <div class="page-header">
+        <div><div class="page-title">입금 내역</div><div class="page-sub">실제 입금 기록 및 관리</div></div>
+        <button class="btn btn-primary btn-sm" onclick="openPaymentModal()">+ 입금 입력</button>
+      </div>
+      <div class="page-body">
+        <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>입금일</th><th>임차인</th><th>청구월</th><th class="num">입금액</th><th>비고</th><th>관리</th></tr></thead>
+            <tbody id="paymentTableBody"></tbody>
+          </table>
+        </div></div></div>
+      </div>
+    </div>
+
+    <!-- ══ 미납 현황 ══ -->
+    <div id="page-unpaid" style="display:none">
+      <div class="page-header">
+        <div><div class="page-title">미납 현황</div><div class="page-sub">자동 산정된 미납금 현황</div></div>
+      </div>
+      <div class="page-body">
+        <div class="metric-grid" id="unpaidMetrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:18px"></div>
+        <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>임차인</th><th>층</th><th>청구월</th><th class="num">청구액</th><th class="num">입금액</th><th class="num">미납금</th><th>납부기한 / 경과</th><th>상태</th></tr></thead>
+            <tbody id="unpaidTableBody"></tbody>
+          </table>
+        </div></div></div>
+      </div>
+    </div>
+
+    <!-- ══ 설정 / 공유 ══ -->
+    <div id="page-settings" style="display:none">
+      <div class="page-header"><div class="page-title">설정 / 공유자 관리</div></div>
+      <div class="page-body">
+        <div class="flex flex-wrap" style="gap:18px">
+          <!-- 임대인 관리 카드 (신규) -->
+          <div class="card" style="width:100%">
+            <div class="card-header">
+              <div class="card-title">임대인 / 건물 관리</div>
+              <button class="btn btn-primary btn-sm" onclick="openLandlordModal()">+ 임대인 추가</button>
+            </div>
+            <div class="card-body" style="padding:0">
+              <div class="table-wrap">
+                <table class="data-table" id="landlordTable">
+                  <thead>
+                    <tr>
+                      <th>색상</th><th>임대인 / 건물명</th><th>대표자</th>
+                      <th>연락처</th><th>사업자번호</th><th>수납계좌</th>
+                      <th>임차인 수</th><th>관리</th>
+                    </tr>
+                  </thead>
+                  <tbody id="landlordTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <!-- Firebase 상태 카드 -->
+          <div class="card" style="flex:1;min-width:280px">
+            <div class="card-header"><div class="card-title">🔥 Firebase 연동</div></div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+              <div id="settings-fb-status" class="fb-status-bar warn"><span>⚠</span> 미연결</div>
+              <div class="form-group">
+                <label class="form-label">데이터 저장 모드</label>
+                <div id="settings-fb-mode" style="font-size:13px;color:var(--text-secondary);padding:6px 0">로컬 메모리 (새로고침 시 초기화)</div>
+              </div>
+              <button class="btn btn-firebase w-full" onclick="openModal('firebaseModal')">🔥 Firebase 설정</button>
+              <button class="btn w-full" onclick="forceSync()">Firebase ↕ 로컬 동기화</button>
+            </div>
+          </div>
+          <!-- Google Sheets 카드 -->
+          <div class="card" style="flex:1;min-width:280px">
+            <div class="card-header"><div class="card-title">📊 Google Sheets 연동</div></div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+              <div id="settings-gs-status" class="fb-status-bar warn"><span>⚠</span> 미연결</div>
+              <button class="btn btn-gsheet w-full" onclick="openModal('gsheetsModal')">📊 Google Sheets 설정</button>
+              <button class="btn w-full" onclick="syncToGSheets(true)">지금 동기화</button>
+              <button class="btn w-full" onclick="exportToCSV()">CSV 전체 내보내기</button>
+            </div>
+          </div>
+          <!-- 공유자 카드 -->
+          <div class="card" style="flex:1;min-width:280px">
+            <div class="card-header"><div class="card-title">공유자 관리 (3인)</div></div>
+            <div class="card-body">
+              <table class="data-table w-full">
+                <thead><tr><th>계정</th><th>역할</th><th>권한</th></tr></thead>
+                <tbody>
+                  <tr><td><div class="flex items-center gap-8"><div class="sb-avatar" style="background:#EFF4FF;color:#2563EB">관</div>관리자</div></td><td><span class="badge badge-blue">관리자</span></td><td class="text-sm text-muted">전체 권한</td></tr>
+                  <tr><td><div class="flex items-center gap-8"><div class="sb-avatar" style="background:#F0FDF4;color:#16A34A">A</div>공유자 A</div></td><td><span class="badge badge-gray">조회자</span></td><td class="text-sm text-muted">조회 전용</td></tr>
+                  <tr><td><div class="flex items-center gap-8"><div class="sb-avatar" style="background:#FFFBEB;color:#D97706">B</div>공유자 B</div></td><td><span class="badge badge-gray">조회자</span></td><td class="text-sm text-muted">조회 전용</td></tr>
+                </tbody>
+              </table>
+              <div class="info-box" style="margin-top:12px">Firebase 연동 완료 후 공유자에게 이 HTML 파일 URL을 공유하면 실시간 동기화됩니다.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  CONSTANTS & COLORS
+// ═══════════════════════════════════════════════════════════
+const COLORS=['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6'];
+
+// ═══════════════════════════════════════════════════════════
+//  LOCAL STATE (fallback when Firebase not connected)
+// ═══════════════════════════════════════════════════════════
+let S={
+  landlord:0, page:'dashboard', dashTab:'summary',
+  editTenant:null, pendingHistories:[],
+  landlords:[
+    {id:1,name:'(주)한강빌딩',color:COLORS[0]},
+    {id:2,name:'서초오피스텔',color:COLORS[1]}
+  ],
+  tenants:[
+    {id:'TN-2024-0001',lid:1,name:'홍길동',floor:'3층',phone:'010-1234-5678',address:'서울 마포구 서강로 10',contractStart:'2024-01-01',contractEnd:'2025-12-31',status:'active',deposit:5000000,depositNote:'',rent:1000000,mgmt:150000,mgmtNote:'',histories:[]},
+    {id:'TN-2024-0002',lid:1,name:'(주)ABC상사',floor:'1층',phone:'02-0000-0000',address:'서울 마포구 서강로 10 1층',contractStart:'2023-06-01',contractEnd:'2026-06-30',status:'active',deposit:20000000,depositNote:'분납완료',rent:2000000,mgmt:200000,mgmtNote:'',histories:[]},
+    {id:'TN-2024-0003',lid:1,name:'이영희',floor:'2층',phone:'010-9999-1111',address:'서울 마포구 서강로 10 2층',contractStart:'2024-03-01',contractEnd:'2025-12-31',status:'active',deposit:8000000,depositNote:'',rent:900000,mgmt:120000,mgmtNote:'',histories:[]},
+    {id:'TN-2025-0001',lid:2,name:'(주)서초파트너스',floor:'2층',phone:'02-3333-4444',address:'서울 서초구 반포대로 50',contractStart:'2025-01-01',contractEnd:'2026-12-31',status:'active',deposit:30000000,depositNote:'',rent:3000000,mgmt:300000,mgmtNote:'',histories:[]}
+  ],
+  bills:[
+    {id:'BL-001',lid:1,tid:'TN-2024-0001',month:'2025-03',type:'monthly',rent:1000000,vat:100000,mgmt:150000,total:1250000,due:'2025-03-10',note:'',paid:1250000},
+    {id:'BL-002',lid:1,tid:'TN-2024-0001',month:'2025-04',type:'monthly',rent:1000000,vat:100000,mgmt:150000,total:1250000,due:'2025-04-10',note:'',paid:0},
+    {id:'BL-003',lid:1,tid:'TN-2024-0002',month:'2025-03',type:'monthly',rent:2000000,vat:200000,mgmt:200000,total:2400000,due:'2025-03-10',note:'',paid:2400000},
+    {id:'BL-004',lid:1,tid:'TN-2024-0002',month:'2025-04',type:'monthly',rent:2000000,vat:200000,mgmt:200000,total:2400000,due:'2025-04-10',note:'',paid:1200000},
+    {id:'BL-005',lid:1,tid:'TN-2024-0003',month:'2025-03',type:'monthly',rent:900000,vat:90000,mgmt:120000,total:1110000,due:'2025-03-10',note:'',paid:1110000},
+    {id:'BL-006',lid:1,tid:'TN-2024-0003',month:'2025-04',type:'monthly',rent:900000,vat:90000,mgmt:120000,total:1110000,due:'2025-04-10',note:'',paid:1110000},
+    {id:'BL-007',lid:2,tid:'TN-2025-0001',month:'2025-03',type:'monthly',rent:3000000,vat:300000,mgmt:300000,total:3600000,due:'2025-03-10',note:'',paid:3600000},
+    {id:'BL-008',lid:2,tid:'TN-2025-0001',month:'2025-04',type:'monthly',rent:3000000,vat:300000,mgmt:300000,total:3600000,due:'2025-04-10',note:'',paid:0}
+  ],
+  payments:[
+    {id:'PAY-001',lid:1,tid:'TN-2024-0001',bid:'BL-001',date:'2025-03-08',amount:1250000,note:''},
+    {id:'PAY-002',lid:1,tid:'TN-2024-0002',bid:'BL-003',date:'2025-03-09',amount:2400000,note:''},
+    {id:'PAY-003',lid:1,tid:'TN-2024-0003',bid:'BL-005',date:'2025-03-07',amount:1110000,note:''},
+    {id:'PAY-004',lid:1,tid:'TN-2024-0002',bid:'BL-004',date:'2025-04-10',amount:1200000,note:'분납 1차'},
+    {id:'PAY-005',lid:1,tid:'TN-2024-0003',bid:'BL-006',date:'2025-04-08',amount:1110000,note:''},
+    {id:'PAY-006',lid:2,tid:'TN-2025-0001',bid:'BL-007',date:'2025-03-06',amount:3600000,note:''}
+  ]
+};
+
+// ═══════════════════════════════════════════════════════════
+//  FIREBASE MODULE
+// ═══════════════════════════════════════════════════════════
+let FB = {
+  app: null, db: null, connected: false,
+  config: null, listeners: {}
+};
+
+// localStorage에서 Firebase config 불러오기
+function loadFBConfig(){
+  try {
+    const raw = localStorage.getItem('rental_fb_config');
+    return raw ? JSON.parse(raw) : null;
+  } catch(e){ return null; }
+}
+function saveFBConfigLS(cfg){
+  localStorage.setItem('rental_fb_config', JSON.stringify(cfg));
+}
+function clearFBConfigLS(){
+  localStorage.removeItem('rental_fb_config');
+}
+
+// Firebase 초기화
+async function initFirebase(config){
+  try {
+    setSyncStatus('syncing','Firebase 연결 중…');
+
+    // databaseURL 검증
+    const url = (config.databaseURL||'').trim();
+    if(!url || !url.startsWith('https://')){
+      showToast('databaseURL이 올바르지 않습니다. https://로 시작해야 합니다.');
+      setSyncStatus('error','URL 오류');
+      return false;
+    }
+    config.databaseURL = url;
+
+    // 기존 앱 정리
+    if(FB.app){
+      try{
+        Object.values(FB.listeners).forEach(l=>{ try{ FB.db.ref('rental').off('value',l); }catch(e){} });
+        FB.listeners = {};
+        await FB.app.delete();
+      }catch(e){}
+      FB.app = null; FB.db = null;
+    }
+
+    FB.app = firebase.initializeApp(config, 'rental-'+Date.now());
+    FB.db  = FB.app.database();
+    FB.config = config;
+
+    // .info/connected 체크 (false여도 계속 진행 — 첫 로드시 false 반환 가능)
+    await new Promise((resolve)=>{
+      const timeout = setTimeout(()=>resolve(), 5000);
+      FB.db.ref('.info/connected').once('value', snap=>{
+        clearTimeout(timeout); resolve();
+      }, ()=>{ clearTimeout(timeout); resolve(); });
+    });
+
+    // 실제 DB 쓰기 테스트
+    await FB.db.ref('rental/_ping').set({ ts: Date.now() });
+
+    FB.connected = true;
+    setSyncStatus('connected','Firebase 연결됨');
+    saveFBConfigLS(config);
+    setupFirebaseListeners();
+    await loadFromFirebase();
+    updateSettingsStatus();
+    showToast('🔥 Firebase 연결 완료! 실시간 동기화 활성화');
+    return true;
+
+  } catch(e){
+    FB.connected = false;
+    setSyncStatus('error','연결 실패');
+    console.error('Firebase error:', e);
+
+    let msg = 'Firebase 연결 실패';
+    if(e.code === 'app/duplicate-app') msg = '페이지를 새로고침 후 다시 시도하세요.';
+    else if(e.message && e.message.includes('permission')) msg = 'DB 권한 오류 — 보안 규칙을 확인하세요.';
+    else if(e.message) msg = '연결 실패: ' + e.message;
+
+    showToast(msg);
+    return false;
+  }
+}
+
+// Firebase 실시간 리스너 (변경 자동 감지)
+function setupFirebaseListeners(){
+  if(!FB.db) return;
+  const collections = ['tenants','bills','payments','landlords'];
+  collections.forEach(col=>{
+    if(FB.listeners[col]) FB.db.ref('rental/'+col).off('value', FB.listeners[col]);
+    FB.listeners[col] = FB.db.ref('rental/'+col).on('value', snap=>{
+      const data = snap.val();
+      if(data){
+        if(col==='landlords') S.landlords = objToArr(data);
+        else if(col==='tenants')  S.tenants  = objToArr(data);
+        else if(col==='bills')    S.bills    = objToArr(data);
+        else if(col==='payments') S.payments = objToArr(data);
+        renderSidebar();
+        renderPage();
+        setSyncStatus('connected','실시간 동기화 중');
+      }
+    }, err=>{
+      setSyncStatus('error','동기화 오류');
+    });
+  });
+}
+
+function objToArr(obj){ return Object.values(obj); }
+function arrToObj(arr){ const o={}; arr.forEach(x=>{ o[x.id]=x; }); return o; }
+
+// Firebase에서 전체 데이터 로드
+async function loadFromFirebase(){
+  if(!FB.db) return;
+  setSyncStatus('syncing','데이터 로드 중…');
+  showLoading('Firebase에서 데이터 불러오는 중…');
+  try {
+    const snap = await FB.db.ref('rental').once('value');
+    const data = snap.val();
+    if(data){
+      if(data.landlords) S.landlords = objToArr(data.landlords);
+      if(data.tenants)   S.tenants   = objToArr(data.tenants);
+      if(data.bills)     S.bills     = objToArr(data.bills);
+      if(data.payments)  S.payments  = objToArr(data.payments);
+    } else {
+      // 첫 연결 시 로컬 데이터를 Firebase에 업로드
+      await pushAllToFirebase();
+      showToast('초기 데이터를 Firebase에 업로드했습니다.');
+    }
+    hideLoading();
+    renderSidebar();
+    renderPage();
+    setSyncStatus('connected','연결됨');
+  } catch(e){
+    hideLoading();
+    setSyncStatus('error','로드 실패');
+  }
+}
+
+// Firebase에 전체 데이터 업로드
+async function pushAllToFirebase(){
+  if(!FB.db) return false;
+  try {
+    await FB.db.ref('rental').set({
+      landlords: arrToObj(S.landlords),
+      tenants:   arrToObj(S.tenants),
+      bills:     arrToObj(S.bills),
+      payments:  arrToObj(S.payments)
+    });
+    return true;
+  } catch(e){ return false; }
+}
+
+// 단일 레코드 저장
+async function fbSet(collection, id, data){
+  if(!FB.db || !FB.connected) return;
+  try {
+    await FB.db.ref(`rental/${collection}/${id}`).set(data);
+  } catch(e){ console.warn('FB write error:', e); }
+}
+async function fbDel(collection, id){
+  if(!FB.db || !FB.connected) return;
+  try {
+    await FB.db.ref(`rental/${collection}/${id}`).remove();
+  } catch(e){ console.warn('FB delete error:', e); }
+}
+
+async function forceSync(){
+  if(!FB.connected){ showToast('Firebase 미연결 상태입니다.'); return; }
+  setSyncStatus('syncing','동기화 중…');
+  const ok = await pushAllToFirebase();
+  if(ok){ setSyncStatus('connected','동기화 완료'); showToast('Firebase 동기화 완료'); }
+  else   { setSyncStatus('error','동기화 실패'); showToast('동기화 실패'); }
+}
+
+// Firebase 설정 저장 버튼
+async function saveFirebaseConfig(){
+  const config = {
+    apiKey:            document.getElementById('fb_apiKey').value.trim(),
+    authDomain:        document.getElementById('fb_authDomain').value.trim(),
+    databaseURL:       document.getElementById('fb_databaseURL').value.trim(),
+    projectId:         document.getElementById('fb_projectId').value.trim(),
+    appId:             document.getElementById('fb_appId').value.trim(),
+    storageBucket:     '',
+    messagingSenderId: ''
+  };
+  if(!config.databaseURL){ showToast('Database URL은 필수입니다.'); return; }
+  const ok = await initFirebase(config);
+  if(ok){
+    closeModal('firebaseModal');
+    updateFBModalStatus();
+  }
+}
+function clearFirebaseConfig(){
+  clearFBConfigLS();
+  FB.connected=false;
+  if(FB.db){ try{ Object.values(FB.listeners).forEach(l=>FB.db.ref('rental').off('value',l)); }catch(e){} }
+  FB.db=null; FB.app=null;
+  setSyncStatus('','미연결');
+  updateSettingsStatus();
+  showToast('Firebase 연동이 해제되었습니다.');
+}
+
+function updateFBModalStatus(){
+  const el=document.getElementById('fb-current-status');
+  if(FB.connected){
+    el.className='fb-status-bar ok';
+    el.innerHTML='<span>✓</span> Firebase 연결됨 — 실시간 동기화 활성화';
+  } else {
+    el.className='fb-status-bar warn';
+    el.innerHTML='<span>⚠</span> Firebase 미연결 — 로컬 데이터만 사용 중 (새로고침 시 초기화)';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GOOGLE SHEETS MODULE
+// ═══════════════════════════════════════════════════════════
+let GS = { url: '', auto: 'off', scope: 'all', timer: null };
+
+function loadGSConfig(){
+  try {
+    const raw = localStorage.getItem('rental_gs_config');
+    if(raw){ const c=JSON.parse(raw); GS.url=c.url||''; GS.auto=c.auto||'off'; GS.scope=c.scope||'all'; }
+  } catch(e){}
+}
+function saveGSConfigLS(){
+  localStorage.setItem('rental_gs_config', JSON.stringify({url:GS.url,auto:GS.auto,scope:GS.scope}));
+}
+
+async function saveGSConfig(){
+  const url = document.getElementById('gs_url').value.trim();
+  if(!url){ showToast('Apps Script URL을 입력하세요.'); return; }
+  GS.url   = url;
+  GS.auto  = document.getElementById('gs_auto').value;
+  GS.scope = document.getElementById('gs_scope').value;
+  saveGSConfigLS();
+  // 인터벌 동기화 설정
+  if(GS.timer) clearInterval(GS.timer);
+  if(GS.auto==='interval'){
+    GS.timer = setInterval(()=>syncToGSheets(false), 5*60*1000);
+  }
+  // 테스트 동기화
+  showToast('설정 저장 완료. 테스트 동기화 시작…');
+  await syncToGSheets(true);
+  updateSettingsStatus();
+  updateGSModalStatus();
+}
+function clearGSConfig(){
+  GS.url=''; localStorage.removeItem('rental_gs_config');
+  if(GS.timer) clearInterval(GS.timer);
+  document.getElementById('gs_url').value='';
+  updateSettingsStatus(); updateGSModalStatus();
+  showToast('Google Sheets 연동이 해제되었습니다.');
+}
+
+async function syncToGSheets(showMsg=true){
+  if(!GS.url){ if(showMsg) showToast('Apps Script URL을 먼저 설정하세요.'); return; }
+  if(showMsg) setSyncStatus('syncing','시트 동기화 중…');
+
+  const tenants=TN(), bills=BL(), payments=PY();
+  const sheets = GS.scope==='bills'
+    ? [['Bills',buildBillRows(bills,tenants)],['Payments',buildPayRows(payments,tenants)]]
+    : [['Tenants',buildTenantRows(tenants)],['Bills',buildBillRows(bills,tenants)],['Payments',buildPayRows(payments,tenants)]];
+
+  let success=true;
+  for(const [sheet,rows] of sheets){
+    try {
+      const r = await fetch(GS.url,{
+        method:'POST',
+        body:JSON.stringify({sheet,rows}),
+        headers:{'Content-Type':'text/plain'} // Apps Script CORS 우회
+      });
+      if(!r.ok) success=false;
+    } catch(e){ success=false; }
+  }
+  if(showMsg){
+    if(success){ showToast('📊 Google Sheets 동기화 완료!'); setSyncStatus('connected','연결됨'); }
+    else {
+      showToast('동기화 오류 — Apps Script URL 및 배포 설정(누구나 액세스)을 확인하세요.');
+      setSyncStatus(FB.connected?'connected':'','연결됨');
+    }
+  }
+}
+
+// Google Sheets 데이터 행 빌더
+function buildTenantRows(tenants){
+  return [['코드','층','임차인명','연락처','계약시작','계약종료','상태','보증금','보증금비고','월세','부가세','관리비','관리비비고'],
+    ...tenants.map(t=>[t.id,t.floor,t.name,t.phone||'',t.contractStart,t.contractEnd,t.status,t.deposit,t.depositNote||'',t.rent,Math.round(t.rent*0.1),t.mgmt,t.mgmtNote||''])];
+}
+function buildBillRows(bills,tenants){
+  return [['청구ID','임차인','층','청구월','유형','월세','부가세','관리비','합계','입금액','미납금','상태','납부기한','비고'],
+    ...bills.map(b=>{const t=tenants.find(x=>x.id===b.tid);const st=billSt(b);return[b.id,t?t.name:'-',t?t.floor:'-',b.month,b.type,b.rent,b.vat,b.mgmt,b.total,b.paid,b.total-b.paid,st.text,b.due||'',b.note||''];})];
+}
+function buildPayRows(payments,tenants){
+  return [['입금ID','임차인','청구ID','입금일','입금액','비고'],
+    ...payments.map(p=>{const t=tenants.find(x=>x.id===p.tid);return[p.id,t?t.name:'-',p.bid,p.date,p.amount,p.note||''];})];
+}
+
+function updateGSModalStatus(){
+  const el=document.getElementById('gs-current-status');
+  if(GS.url){
+    el.className='fb-status-bar ok';
+    el.innerHTML='<span>✓</span> Google Sheets 연동됨 — '+GS.url.slice(0,60)+'…';
+  } else {
+    el.className='fb-status-bar warn';
+    el.innerHTML='<span>⚠</span> Google Sheets 미연결 — Apps Script URL 미설정';
+  }
+}
+
+function updateSettingsStatus(){
+  // Firebase
+  const fbs=document.getElementById('settings-fb-status');
+  const fbm=document.getElementById('settings-fb-mode');
+  if(fbs&&fbm){
+    if(FB.connected){
+      fbs.className='fb-status-bar ok'; fbs.innerHTML='<span>✓</span> Firebase 실시간 연결됨';
+      fbm.textContent='Firebase Realtime Database (실시간 동기화)';
+    } else {
+      fbs.className='fb-status-bar warn'; fbs.innerHTML='<span>⚠</span> Firebase 미연결';
+      fbm.textContent='로컬 메모리 (새로고침 시 초기화)';
+    }
+  }
+  // GSheets
+  const gss=document.getElementById('settings-gs-status');
+  if(gss){
+    if(GS.url){
+      gss.className='fb-status-bar ok'; gss.innerHTML='<span>✓</span> Google Sheets 연동됨';
+    } else {
+      gss.className='fb-status-bar warn'; gss.innerHTML='<span>⚠</span> Google Sheets 미연결';
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SYNC STATUS UI
+// ═══════════════════════════════════════════════════════════
+function setSyncStatus(state, label){
+  const dot=document.getElementById('syncDot');
+  const lbl=document.getElementById('syncLabel');
+  if(dot){ dot.className='sync-dot'+(state?' '+state:''); }
+  if(lbl) lbl.textContent=label;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  LOADING UI
+// ═══════════════════════════════════════════════════════════
+function showLoading(msg){
+  document.getElementById('loadingMsg').textContent=msg||'처리 중…';
+  document.getElementById('loadingOverlay').classList.add('show');
+}
+function hideLoading(){ document.getElementById('loadingOverlay').classList.remove('show'); }
+
+// ═══════════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════════
+const fmt=n=>Number(n||0).toLocaleString('ko-KR');
+const fmtW=n=>{const w=Math.round(n/10000);return w>=10000?`${(w/10000).toFixed(1)}억`:`${w}만`;};
+const LL=()=>S.landlords[S.landlord]||S.landlords[0];
+const TN=()=>S.tenants.filter(t=>t.lid===LL().id);
+const BL=()=>S.bills.filter(b=>b.lid===LL().id);
+const PY=()=>S.payments.filter(p=>p.lid===LL().id);
+const today=()=>new Date().toISOString().slice(0,10);
+const thisMonth=()=>new Date().toISOString().slice(0,7);
+const daysBetween=d=>Math.max(0,Math.floor((new Date()-new Date(d))/86400000));
+function genId(px,list){ const y=new Date().getFullYear(); const n=list.filter(x=>x.id&&x.id.startsWith(px+'-'+y)).length; return`${px}-${y}-${String(n+1).padStart(4,'0')}`; }
+function billSt(b){ if(b.paid<=0)return{text:'미납',cls:'badge-unpaid'}; if(b.paid>=b.total)return{text:'납부완료',cls:'badge-paid'}; return{text:'일부납부',cls:'badge-partial'}; }
+
+// ═══════════════════════════════════════════════════════════
+//  SIDEBAR & LANDLORD CRUD
+// ═══════════════════════════════════════════════════════════
+function renderSidebar(){
+  document.getElementById('landlordList').innerHTML = S.landlords.map((l,i)=>`
+    <div class="sb-ll-row ${i===S.landlord?'active':''}">
+      <button class="sb-landlord-btn ${i===S.landlord?'active':''}" style="flex:1;padding:8px 10px" onclick="selectLL(${i})">
+        <span class="sb-dot" style="background:${l.color}"></span>
+        <span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.name}</span>
+      </button>
+      <button class="sb-ll-action" onclick="openLandlordModal(${i})" title="수정">✎</button>
+      <button class="sb-ll-action" onclick="deleteLandlord(${i})" title="삭제" style="color:rgba(255,100,100,0.7)">✕</button>
+    </div>`).join('');
+}
+
+function selectLL(i){ S.landlord=i; renderSidebar(); renderPage(); closeSidebar(); }
+
+// 임대인 모달 열기 (신규 or 수정)
+let _editLLIdx = null;
+function openLandlordModal(idx){
+  _editLLIdx = (idx !== undefined) ? idx : null;
+  const isEdit = _editLLIdx !== null;
+  document.getElementById('landlordModalTitle').textContent = isEdit ? '임대인 수정' : '임대인 등록';
+
+  if(isEdit){
+    const l = S.landlords[_editLLIdx];
+    document.getElementById('ll_name').value    = l.name    || '';
+    document.getElementById('ll_bizno').value   = l.bizno   || '';
+    document.getElementById('ll_owner').value   = l.owner   || '';
+    document.getElementById('ll_phone').value   = l.phone   || '';
+    document.getElementById('ll_email').value   = l.email   || '';
+    document.getElementById('ll_address').value = l.address || '';
+    document.getElementById('ll_account').value = l.account || '';
+    document.getElementById('ll_color').value   = l.color   || '#3B82F6';
+    document.getElementById('ll_note').value    = l.note    || '';
+  } else {
+    ['ll_name','ll_bizno','ll_owner','ll_phone','ll_email','ll_address','ll_account','ll_note']
+      .forEach(id => document.getElementById(id).value = '');
+    document.getElementById('ll_color').value = COLORS[S.landlords.length % COLORS.length];
+  }
+  openModal('landlordModal');
+}
+
+async function saveLandlord(){
+  const name = document.getElementById('ll_name').value.trim();
+  if(!name){ showToast('임대인/건물명은 필수입니다.'); return; }
+
+  const data = {
+    name,
+    bizno:   document.getElementById('ll_bizno').value.trim(),
+    owner:   document.getElementById('ll_owner').value.trim(),
+    phone:   document.getElementById('ll_phone').value.trim(),
+    email:   document.getElementById('ll_email').value.trim(),
+    address: document.getElementById('ll_address').value.trim(),
+    account: document.getElementById('ll_account').value.trim(),
+    color:   document.getElementById('ll_color').value,
+    note:    document.getElementById('ll_note').value.trim(),
+  };
+
+  if(_editLLIdx !== null){
+    // 수정
+    data.id = S.landlords[_editLLIdx].id;
+    S.landlords[_editLLIdx] = { ...S.landlords[_editLLIdx], ...data };
+    await fbSet('landlords', data.id, S.landlords[_editLLIdx]);
+    showToast('임대인 정보가 수정되었습니다.');
+  } else {
+    // 신규
+    data.id = Date.now();
+    S.landlords.push(data);
+    await fbSet('landlords', data.id, data);
+    showToast('임대인이 등록되었습니다.');
+  }
+  closeModal('landlordModal');
+  renderSidebar();
+  renderPage();
+}
+
+async function deleteLandlord(idx){
+  const l = S.landlords[idx];
+  const tenantCount = S.tenants.filter(t=>t.lid===l.id).length;
+  const msg = tenantCount > 0
+    ? `'${l.name}'을 삭제하면 연결된 임차인 ${tenantCount}명의 데이터도 함께 삭제됩니다.\n정말 삭제하시겠습니까?`
+    : `'${l.name}'을 삭제하시겠습니까?`;
+  if(!confirm(msg)) return;
+
+  // 연결 데이터 삭제
+  const relTenants = S.tenants.filter(t=>t.lid===l.id);
+  const relBills   = S.bills.filter(b=>b.lid===l.id);
+  const relPays    = S.payments.filter(p=>p.lid===l.id);
+  for(const t of relTenants) await fbDel('tenants', t.id);
+  for(const b of relBills)   await fbDel('bills',   b.id);
+  for(const p of relPays)    await fbDel('payments', p.id);
+  S.tenants  = S.tenants.filter(t=>t.lid!==l.id);
+  S.bills    = S.bills.filter(b=>b.lid!==l.id);
+  S.payments = S.payments.filter(p=>p.lid!==l.id);
+
+  await fbDel('landlords', l.id);
+  S.landlords.splice(idx, 1);
+  if(S.landlord >= S.landlords.length) S.landlord = Math.max(0, S.landlords.length-1);
+  renderSidebar();
+  renderPage();
+  showToast('임대인이 삭제되었습니다.');
+}
+
+function renderLandlordTable(){
+  const tbody = document.getElementById('landlordTableBody');
+  if(!tbody) return;
+  if(!S.landlords.length){
+    tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted)">등록된 임대인 없음</td></tr>';
+    return;
+  }
+  tbody.innerHTML = S.landlords.map((l,i)=>{
+    const tenantCnt = S.tenants.filter(t=>t.lid===l.id).length;
+    return `<tr>
+      <td><span style="display:inline-block;width:16px;height:16px;border-radius:4px;background:${l.color};vertical-align:middle"></span></td>
+      <td><strong>${l.name}</strong>${l.note?`<br><span class="text-sm text-muted">${l.note}</span>`:''}</td>
+      <td class="text-sm">${l.owner||'-'}</td>
+      <td class="text-sm">${l.phone||'-'}</td>
+      <td class="text-sm">${l.bizno||'-'}</td>
+      <td class="text-sm" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.account||'-'}</td>
+      <td style="text-align:center"><span class="badge badge-gray">${tenantCnt}명</span></td>
+      <td>
+        <div class="flex gap-8">
+          <button class="btn btn-sm" onclick="openLandlordModal(${i})">수정</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteLandlord(${i})">삭제</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openSidebar(){ document.getElementById('sidebar').classList.add('open'); document.getElementById('sbOverlay').classList.add('show'); }
+function closeSidebar(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('sbOverlay').classList.remove('show'); }
+
+// ═══════════════════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════════════════
+function navigate(page){
+  document.querySelectorAll('[id^="page-"]').forEach(el=>el.style.display='none');
+  document.querySelectorAll('.sb-nav-item').forEach(el=>el.classList.remove('active'));
+  document.getElementById('page-'+page).style.display='block';
+  document.getElementById('nav-'+page).classList.add('active');
+  S.page=page; renderPage(); closeSidebar();
+}
+function renderPage(){
+  if(S.page==='dashboard') renderDashboard();
+  else if(S.page==='tenants')  renderTenants();
+  else if(S.page==='bills')    renderBills();
+  else if(S.page==='payments') renderPayments();
+  else if(S.page==='unpaid')   renderUnpaid();
+  else if(S.page==='settings') { updateSettingsStatus(); updateFBModalStatus(); updateGSModalStatus(); renderLandlordTable(); }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DASHBOARD
+// ═══════════════════════════════════════════════════════════
+function switchDashTab(tab){
+  S.dashTab=tab;
+  document.getElementById('seg-summary').classList.toggle('active',tab==='summary');
+  document.getElementById('seg-detail').classList.toggle('active',tab==='detail');
+  document.getElementById('dash-summary').style.display=tab==='summary'?'block':'none';
+  document.getElementById('dash-detail').style.display=tab==='detail'?'block':'none';
+  if(tab==='detail') renderDetailTable();
+}
+
+function renderDashboard(){
+  const ll=LL();
+  document.getElementById('dash-title').textContent=ll.name+' 대시보드';
+  document.getElementById('dash-date').textContent=new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'});
+  document.getElementById('dash-month-badge').textContent=thisMonth()+' 기준';
+
+  const bills=BL(), thisBills=bills.filter(b=>b.month===thisMonth());
+  const allBilled=bills.reduce((s,b)=>s+b.total,0);
+  const allPaid=bills.reduce((s,b)=>s+b.paid,0);
+  const thisBilled=thisBills.reduce((s,b)=>s+b.total,0);
+  const thisUnpaid=thisBills.reduce((s,b)=>s+(b.total-b.paid),0);
+  const rate=allBilled>0?Math.round(allPaid/allBilled*100):0;
+
+  document.getElementById('dashMetrics').innerHTML=`
+    <div class="metric-card">
+      <div class="metric-label">이번달 청구 합계</div>
+      <div class="metric-value">${fmt(thisBilled)}<span style="font-size:13px;color:var(--text-muted);font-weight:400">원</span></div>
+      <div class="metric-sub">${thisMonth()} · ${thisBills.length}건</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">이번달 미납</div>
+      <div class="metric-value col-danger">${fmt(thisUnpaid)}<span style="font-size:13px;font-weight:400">원</span></div>
+      <div class="metric-sub">${thisBills.filter(b=>b.paid<b.total).length}건</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">누계 수납률</div>
+      <div class="metric-value col-success">${rate}%</div>
+      <div class="metric-sub">${fmtW(allPaid)} / ${fmtW(allBilled)}</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">누계 수납액</div>
+      <div class="metric-value">${fmtW(allPaid)}</div>
+      <div class="metric-sub">${fmt(allPaid)}원</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">계약중 임차인</div>
+      <div class="metric-value">${TN().filter(t=>t.status==='active').length}<span style="font-size:13px;color:var(--text-muted);font-weight:400">명</span></div>
+      <div class="metric-sub">전체 ${TN().length}명</div>
+    </div>`;
+
+  // 층별 요약
+  const tenants=TN().sort((a,b)=>a.floor.localeCompare(b.floor));
+  const tbody=document.getElementById('floorTableBody');
+  if(!tenants.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--text-muted)">등록된 임차인 없음</td></tr>'; }
+  else {
+    tbody.innerHTML=tenants.map(t=>{
+      const tB=BL().filter(b=>b.tid===t.id&&b.month===thisMonth());
+      const billed=tB.reduce((s,b)=>s+b.total,0), paid=tB.reduce((s,b)=>s+b.paid,0), unpaid=billed-paid;
+      const st=unpaid>0?(unpaid<billed?{text:'일부납부',cls:'badge-partial'}:{text:'미납',cls:'badge-unpaid'}):{text:billed>0?'납부완료':'청구없음',cls:billed>0?'badge-paid':'badge-gray'};
+      return`<tr>
+        <td><span class="floor-badge">${t.floor}</span></td>
+        <td><strong>${t.name}</strong></td>
+        <td class="text-sm text-muted" style="white-space:nowrap">${t.contractStart}~${t.contractEnd}</td>
+        <td class="num">${fmt(billed)}</td>
+        <td class="num col-success">${fmt(paid)}</td>
+        <td class="num" style="color:${unpaid>0?'var(--danger)':'var(--text-muted)'};font-weight:${unpaid>0?700:400}">${fmt(unpaid)}</td>
+        <td><span class="badge ${st.cls}">${st.text}</span></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // 수납률 바
+  document.getElementById('collectionRateChart').innerHTML=TN().map(t=>{
+    const tb=BL().filter(b=>b.tid===t.id);
+    const bl=tb.reduce((s,b)=>s+b.total,0), pd=tb.reduce((s,b)=>s+b.paid,0);
+    const r=bl>0?Math.round(pd/bl*100):0;
+    const c=r>=100?'var(--success)':r>50?'var(--warning)':'var(--danger)';
+    return`<div style="margin-bottom:14px">
+      <div class="flex justify-between" style="margin-bottom:5px">
+        <span style="font-size:12px;font-weight:500">${t.floor} · ${t.name}</span>
+        <span style="font-size:12px;font-weight:700;color:${c}">${r}%</span>
+      </div>
+      <div class="progress-wrap"><div class="progress-bar" style="width:${r}%;background:${c}"></div></div>
+    </div>`;
+  }).join('')||'<div class="text-sm text-muted">데이터 없음</div>';
+
+  // 최근 입금
+  const pays=PY().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6);
+  document.getElementById('recentPayments').innerHTML=!pays.length
+    ?'<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">입금 내역 없음</td></tr>'
+    :pays.map(p=>{const t=S.tenants.find(x=>x.id===p.tid);return`<tr><td>${p.date}</td><td>${t?t.name:'-'}</td><td style="font-size:12px;color:var(--text-muted)">${p.bid}</td><td class="num">${fmt(p.amount)}</td><td class="text-sm text-muted">${p.note||'-'}</td></tr>`;}).join('');
+
+  if(S.dashTab==='detail') renderDetailTable();
+}
+
+// 층별 상세
+function renderDetailTable(){
+  const month=document.getElementById('detailMonth').value;
+  document.getElementById('detail-period-badge').textContent=month?month+' 기준':'전체 기간';
+  let bills=BL(); if(month) bills=bills.filter(b=>b.month===month);
+  bills=bills.sort((a,b)=>{const ta=S.tenants.find(x=>x.id===a.tid),tb2=S.tenants.find(x=>x.id===b.tid);return(ta?ta.floor:'').localeCompare(tb2?tb2.floor:'')||a.month.localeCompare(b.month);});
+  const tbody=document.getElementById('detailTableBody'), tfoot=document.getElementById('detailTableFoot');
+  if(!bills.length){tbody.innerHTML='<tr><td colspan="13" style="text-align:center;padding:28px;color:var(--text-muted)">해당 기간 청구 내역 없음</td></tr>';tfoot.innerHTML='';return;}
+  const groups={};
+  bills.forEach(b=>{if(!groups[b.tid])groups[b.tid]=[];groups[b.tid].push(b);});
+  let rows='', totR=0,totV=0,totM=0,totB=0,totP=0,totU=0;
+  Object.entries(groups).forEach(([tid,gb])=>{
+    const t=S.tenants.find(x=>x.id===tid);
+    const gR=gb.reduce((s,b)=>s+b.rent,0),gV=gb.reduce((s,b)=>s+b.vat,0),gM=gb.reduce((s,b)=>s+b.mgmt,0);
+    const gB=gb.reduce((s,b)=>s+b.total,0),gP=gb.reduce((s,b)=>s+b.paid,0),gU=gB-gP;
+    totR+=gR;totV+=gV;totM+=gM;totB+=gB;totP+=gP;totU+=gU;
+    gb.forEach((b,i)=>{
+      const st=billSt(b); const unpaid=b.total-b.paid;
+      rows+=`<tr>
+        <td>${i===0?`<span class="floor-badge">${t?t.floor:'-'}</span>`:''}</td>
+        <td>${i===0?`<strong>${t?t.name:'-'}</strong>`:''}</td>
+        <td style="font-size:12px">${b.month}</td>
+        <td><span class="badge ${b.type==='partial'?'badge-partial':'badge-gray'}">${b.type==='partial'?'일부기간':'정기'}</span></td>
+        <td class="num">${fmt(b.rent)}</td><td class="num-sm">${fmt(b.vat)}</td><td class="num">${fmt(b.mgmt)}</td>
+        <td class="num font-bold">${fmt(b.total)}</td>
+        <td class="num col-success">${fmt(b.paid)}</td>
+        <td class="num" style="color:${unpaid>0?'var(--danger)':'var(--text-muted)'};font-weight:${unpaid>0?700:400}">${fmt(unpaid)}</td>
+        <td class="text-sm text-muted" style="white-space:nowrap">${b.due||'-'}</td>
+        <td><span class="badge ${st.cls}">${st.text}</span></td>
+        <td class="text-sm text-muted">${b.note||'-'}</td>
+      </tr>`;
+    });
+    if(gb.length>1) rows+=`<tr class="subtotal-row"><td colspan="4" style="padding:7px 11px">소계 — ${t?t.name:'-'} (${gb.length}건)</td><td class="num">${fmt(gR)}</td><td class="num-sm">${fmt(gV)}</td><td class="num">${fmt(gM)}</td><td class="num">${fmt(gB)}</td><td class="num col-success">${fmt(gP)}</td><td class="num" style="color:${gU>0?'var(--danger)':'var(--text-muted)'}">${fmt(gU)}</td><td colspan="3"></td></tr>`;
+  });
+  tbody.innerHTML=rows;
+  tfoot.innerHTML=`<tr style="background:var(--surface2);font-weight:700;font-size:13px"><td colspan="4" style="padding:10px 11px">합계 (${bills.length}건)</td><td class="num">${fmt(totR)}</td><td class="num-sm">${fmt(totV)}</td><td class="num">${fmt(totM)}</td><td class="num">${fmt(totB)}</td><td class="num col-success">${fmt(totP)}</td><td class="num" style="color:${totU>0?'var(--danger)':'var(--text-muted)'}">${fmt(totU)}</td><td colspan="3"></td></tr>`;
+}
+function exportDetailCSV(){
+  const month=document.getElementById('detailMonth').value;
+  let bills=BL();if(month)bills=bills.filter(b=>b.month===month);
+  const rows=[['층','임차인','청구월','유형','월세','부가세','관리비','청구합계','입금액','미납금','상태']];
+  bills.forEach(b=>{const t=S.tenants.find(x=>x.id===b.tid);const st=billSt(b);rows.push([t?t.floor:'-',t?t.name:'-',b.month,b.type,b.rent,b.vat,b.mgmt,b.total,b.paid,b.total-b.paid,st.text]);});
+  dlCSV(rows,'detail_'+LL().name+'_'+(month||'all'));
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TENANTS
+// ═══════════════════════════════════════════════════════════
+function renderTenants(){
+  document.getElementById('tenant-landlord-sub').textContent=LL().name;
+  const tenants=TN().sort((a,b)=>a.floor.localeCompare(b.floor));
+  const tbody=document.getElementById('tenantTableBody');
+  if(!tenants.length){tbody.innerHTML='<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--text-muted)">등록된 임차인 없음</td></tr>';return;}
+  const stMap={active:'<span class="badge badge-blue">계약중</span>',expired:'<span class="badge badge-gray">만료</span>',pending:'<span class="badge badge-gray">대기</span>'};
+  tbody.innerHTML=tenants.map(t=>`<tr>
+    <td style="font-size:11px;color:var(--text-muted)">${t.id}</td>
+    <td><span class="floor-badge">${t.floor}</span></td>
+    <td><strong>${t.name}</strong>${t.histories&&t.histories.length?`<span class="history-tag" style="margin-left:6px">변경${t.histories.length}</span>`:''}</td>
+    <td class="text-sm">${t.phone||'-'}</td>
+    <td class="text-sm text-muted" style="white-space:nowrap">${t.contractStart}~${t.contractEnd}</td>
+    <td class="num">${fmt(t.rent)}</td><td class="num-sm">${fmt(Math.round(t.rent*0.1))}</td><td class="num">${fmt(t.mgmt)}</td>
+    <td class="num">${fmt(t.deposit)}<br><span class="text-sm text-muted">${t.depositNote||''}</span></td>
+    <td>${stMap[t.status]||''}</td>
+    <td><div class="flex gap-8"><button class="btn btn-sm" onclick="editTenant('${t.id}')">수정</button><button class="btn btn-sm btn-danger" onclick="deleteTenant('${t.id}')">삭제</button></div></td>
+  </tr>`).join('');
+}
+function openTenantModal(){
+  S.editTenant=null;S.pendingHistories=[];
+  document.getElementById('tenantModalTitle').textContent='임차인 등록';
+  document.getElementById('f_code').value=genId('TN',S.tenants);
+  ['f_name','f_floor','f_phone','f_address','f_start','f_end','f_deposit','f_deposit_note','f_rent','f_vat','f_rent_total','f_mgmt','f_mgmt_note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('f_status').value='active';
+  document.getElementById('contractHistory').textContent='등록된 변경 이력 없음';
+  openModal('tenantModal');
+}
+function editTenant(id){
+  const t=S.tenants.find(x=>x.id===id);if(!t)return;
+  S.editTenant=id;S.pendingHistories=[...(t.histories||[])];
+  document.getElementById('tenantModalTitle').textContent='임차인 수정';
+  document.getElementById('f_code').value=t.id;
+  document.getElementById('f_name').value=t.name;
+  document.getElementById('f_floor').value=t.floor;
+  document.getElementById('f_phone').value=t.phone||'';
+  document.getElementById('f_address').value=t.address||'';
+  document.getElementById('f_start').value=t.contractStart;
+  document.getElementById('f_end').value=t.contractEnd;
+  document.getElementById('f_status').value=t.status;
+  document.getElementById('f_deposit').value=t.deposit||'';
+  document.getElementById('f_deposit_note').value=t.depositNote||'';
+  document.getElementById('f_rent').value=t.rent;
+  document.getElementById('f_mgmt').value=t.mgmt;
+  document.getElementById('f_mgmt_note').value=t.mgmtNote||'';
+  calcTax();renderHistoryList();openModal('tenantModal');
+}
+async function saveTenant(){
+  const name=document.getElementById('f_name').value.trim();
+  const floor=document.getElementById('f_floor').value.trim();
+  const rent=Number(document.getElementById('f_rent').value)||0;
+  const mgmt=Number(document.getElementById('f_mgmt').value)||0;
+  const start=document.getElementById('f_start').value;
+  const end=document.getElementById('f_end').value;
+  if(!name||!floor||!start||!end){showToast('필수 항목을 입력해주세요.');return;}
+  const data={id:S.editTenant||document.getElementById('f_code').value,lid:LL().id,name,floor,phone:document.getElementById('f_phone').value,address:document.getElementById('f_address').value,contractStart:start,contractEnd:end,status:document.getElementById('f_status').value,deposit:Number(document.getElementById('f_deposit').value)||0,depositNote:document.getElementById('f_deposit_note').value,rent,mgmt,mgmtNote:document.getElementById('f_mgmt_note').value,histories:[...S.pendingHistories]};
+  if(S.editTenant){ S.tenants[S.tenants.findIndex(x=>x.id===S.editTenant)]=data; }
+  else             { S.tenants.push(data); }
+  await fbSet('tenants',data.id,data);
+  if(GS.auto==='save') syncToGSheets(false);
+  closeModal('tenantModal');renderTenants();
+  showToast(S.editTenant?'수정되었습니다.':'등록되었습니다.');
+}
+async function deleteTenant(id){
+  if(!confirm('임차인을 삭제하시겠습니까?'))return;
+  S.tenants=S.tenants.filter(x=>x.id!==id);
+  await fbDel('tenants',id);
+  renderTenants();showToast('삭제됨');
+}
+function calcTax(){const r=Number(document.getElementById('f_rent').value)||0;document.getElementById('f_vat').value=fmt(Math.round(r*0.1))+' 원';document.getElementById('f_rent_total').value=fmt(r+Math.round(r*0.1))+' 원';}
+
+function addContractHistory(){openModal('historyModal');}
+function saveContractHistory(){
+  const date=document.getElementById('h_date').value;if(!date){showToast('변경 적용일 필수');return;}
+  S.pendingHistories.push({date,type:document.getElementById('h_type').value,newStart:document.getElementById('h_new_start').value,newEnd:document.getElementById('h_new_end').value,newRent:document.getElementById('h_new_rent').value,newMgmt:document.getElementById('h_new_mgmt').value,reason:document.getElementById('h_reason').value});
+  ['h_date','h_new_start','h_new_end','h_new_rent','h_new_mgmt','h_reason'].forEach(id=>document.getElementById(id).value='');
+  closeModal('historyModal');renderHistoryList();showToast('이력 추가됨');
+}
+function renderHistoryList(){
+  const el=document.getElementById('contractHistory');
+  if(!S.pendingHistories.length){el.textContent='등록된 변경 이력 없음';return;}
+  const tm={contract:'계약기간',rent:'월세',mgmt:'관리비',all:'전체'};
+  el.innerHTML=S.pendingHistories.map((h,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--warning-bg);border:1px solid #fde68a;border-radius:8px;margin-bottom:5px"><span class="history-tag">${tm[h.type]||h.type} 변경</span><span class="text-sm">${h.date} · ${h.reason||'사유없음'}</span><button onclick="removeHistory(${i})" style="margin-left:auto;border:none;background:transparent;color:var(--danger);cursor:pointer;font-size:12px">삭제</button></div>`).join('');
+}
+function removeHistory(i){S.pendingHistories.splice(i,1);renderHistoryList();}
+
+// ═══════════════════════════════════════════════════════════
+//  BILLS
+// ═══════════════════════════════════════════════════════════
+function renderBills(){
+  const fm=document.getElementById('billFilterMonth').value;
+  let bills=BL();if(fm)bills=bills.filter(b=>b.month===fm);
+  bills=bills.sort((a,b)=>b.month.localeCompare(a.month));
+  const tbody=document.getElementById('billTableBody'), tfoot=document.getElementById('billTableFoot');
+  if(!bills.length){tbody.innerHTML='<tr><td colspan="11" style="text-align:center;padding:28px;color:var(--text-muted)">청구 내역 없음</td></tr>';tfoot.innerHTML='';return;}
+  const totB=bills.reduce((s,b)=>s+b.total,0),totP=bills.reduce((s,b)=>s+b.paid,0),totU=totB-totP;
+  tbody.innerHTML=bills.map(b=>{
+    const t=S.tenants.find(x=>x.id===b.tid);const st=billSt(b);const unpaid=b.total-b.paid;
+    return`<tr><td style="font-size:12px">${b.month}</td><td>${t?t.name:'-'}</td>
+      <td><span class="badge ${b.type==='partial'?'badge-partial':'badge-gray'}">${b.type==='partial'?'일부기간':'정기'}</span></td>
+      <td class="num">${fmt(b.rent)}</td><td class="num-sm">${fmt(b.vat)}</td><td class="num">${fmt(b.mgmt)}</td>
+      <td class="num font-bold">${fmt(b.total)}</td><td class="num col-success">${fmt(b.paid)}</td>
+      <td class="num" style="color:${unpaid>0?'var(--danger)':'var(--text-muted)'};font-weight:${unpaid>0?700:400}">${fmt(unpaid)}</td>
+      <td><span class="badge ${st.cls}">${st.text}</span></td>
+      <td class="text-sm text-muted">${b.note||'-'}</td></tr>`;
+  }).join('');
+  tfoot.innerHTML=`<tr style="background:var(--surface2);font-weight:700"><td colspan="6" style="padding:9px 11px;color:var(--text-secondary)">합계 (${bills.length}건)</td><td class="num">${fmt(totB)}</td><td class="num col-success">${fmt(totP)}</td><td class="num" style="color:${totU>0?'var(--danger)':'var(--text-muted)'}">${fmt(totU)}</td><td colspan="2"></td></tr>`;
+}
+function openBillModal(){
+  const tenants=TN();
+  document.getElementById('b_tenant').innerHTML=tenants.map(t=>`<option value="${t.id}">${t.floor} · ${t.name}</option>`).join('');
+  document.getElementById('b_month').value=thisMonth();
+  document.getElementById('b_due').value=thisMonth()+'-10';
+  fillBillDefaults();openModal('billModal');
+}
+function fillBillDefaults(){const t=S.tenants.find(x=>x.id===document.getElementById('b_tenant').value);if(!t)return;document.getElementById('b_rent').value=t.rent;document.getElementById('b_mgmt').value=t.mgmt;calcBillTotal();}
+function calcBillTotal(){const r=Number(document.getElementById('b_rent').value)||0,m=Number(document.getElementById('b_mgmt').value)||0;document.getElementById('b_vat').value=fmt(Math.round(r*0.1))+' 원';document.getElementById('b_total').value=fmt(r+Math.round(r*0.1)+m)+' 원';}
+async function saveBill(){
+  const tid=document.getElementById('b_tenant').value,month=document.getElementById('b_month').value;
+  const rent=Number(document.getElementById('b_rent').value)||0,mgmt=Number(document.getElementById('b_mgmt').value)||0;
+  if(!tid||!month||!rent){showToast('필수 항목 입력 필요');return;}
+  const vat=Math.round(rent*0.1);
+  const bill={id:genId('BL',S.bills),lid:LL().id,tid,month,type:document.getElementById('b_type').value,rent,vat,mgmt,total:rent+vat+mgmt,due:document.getElementById('b_due').value,note:document.getElementById('b_note').value,paid:0};
+  S.bills.push(bill);
+  await fbSet('bills',bill.id,bill);
+  if(GS.auto==='save') syncToGSheets(false);
+  closeModal('billModal');showToast('청구 생성됨');renderBills();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PAYMENTS
+// ═══════════════════════════════════════════════════════════
+function renderPayments(){
+  const pays=PY().sort((a,b)=>b.date.localeCompare(a.date));
+  document.getElementById('paymentTableBody').innerHTML=!pays.length
+    ?'<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-muted)">입금 내역 없음</td></tr>'
+    :pays.map(p=>{const t=S.tenants.find(x=>x.id===p.tid);return`<tr><td>${p.date}</td><td>${t?t.name:'-'}</td><td style="font-size:11px;color:var(--text-muted)">${p.bid}</td><td class="num">${fmt(p.amount)}</td><td class="text-sm text-muted">${p.note||'-'}</td><td><button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')">삭제</button></td></tr>`;}).join('');
+}
+function openPaymentModal(){
+  const tenants=TN();
+  document.getElementById('p_tenant').innerHTML=tenants.map(t=>`<option value="${t.id}">${t.floor} · ${t.name}</option>`).join('');
+  document.getElementById('p_date').value=today();fillPaymentBills();
+  document.getElementById('p_tenant').onchange=fillPaymentBills;openModal('paymentModal');
+}
+function fillPaymentBills(){
+  const tid=document.getElementById('p_tenant').value;
+  const bills=BL().filter(b=>b.tid===tid&&b.paid<b.total);
+  document.getElementById('p_bill').innerHTML=bills.length?bills.map(b=>`<option value="${b.id}">${b.month} (미납 ${fmt(b.total-b.paid)}원)</option>`).join(''):'<option value="">미납 청구 없음</option>';
+}
+async function savePayment(){
+  const tid=document.getElementById('p_tenant').value,bid=document.getElementById('p_bill').value;
+  const amt=Number(document.getElementById('p_amount').value)||0,date=document.getElementById('p_date').value;
+  if(!tid||!bid||!amt||!date){showToast('필수 항목 입력 필요');return;}
+  const pay={id:genId('PAY',S.payments),lid:LL().id,tid,bid,date,amount:amt,note:document.getElementById('p_note').value};
+  S.payments.push(pay);
+  const b=S.bills.find(x=>x.id===bid);
+  if(b){ b.paid=Math.min(b.total,b.paid+amt); await fbSet('bills',b.id,b); }
+  await fbSet('payments',pay.id,pay);
+  if(GS.auto==='save') syncToGSheets(false);
+  closeModal('paymentModal');showToast('입금 저장됨');renderPayments();
+}
+async function deletePayment(id){
+  if(!confirm('삭제 시 납부액이 조정됩니다. 삭제하시겠습니까?'))return;
+  const p=S.payments.find(x=>x.id===id);
+  if(p){ const b=S.bills.find(x=>x.id===p.bid); if(b){ b.paid=Math.max(0,b.paid-p.amount); await fbSet('bills',b.id,b); } }
+  S.payments=S.payments.filter(x=>x.id!==id);
+  await fbDel('payments',id);
+  renderPayments();showToast('삭제됨');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  UNPAID
+// ═══════════════════════════════════════════════════════════
+function renderUnpaid(){
+  const bills=BL().filter(b=>b.paid<b.total);
+  const total=bills.reduce((s,b)=>s+(b.total-b.paid),0);
+  const overdue=bills.filter(b=>b.due&&new Date(b.due)<new Date());
+  document.getElementById('unpaidMetrics').innerHTML=`
+    <div class="metric-card"><div class="metric-label">미납 건수</div><div class="metric-value col-danger">${bills.length}건</div></div>
+    <div class="metric-card"><div class="metric-label">미납 합계</div><div class="metric-value col-danger">${fmt(total)}<span style="font-size:13px;font-weight:400">원</span></div><div class="metric-sub">${fmtW(total)}</div></div>
+    <div class="metric-card"><div class="metric-label">연체 (기한 초과)</div><div class="metric-value col-warning">${overdue.length}건</div></div>`;
+  const tbody=document.getElementById('unpaidTableBody');
+  if(!bills.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--success)">미납 없음 — 전체 납부 완료</td></tr>';return;}
+  tbody.innerHTML=bills.sort((a,b)=>a.month.localeCompare(b.month)).map(b=>{
+    const t=S.tenants.find(x=>x.id===b.tid);const unpaid=b.total-b.paid;
+    const days=b.due?daysBetween(b.due):0;const st=billSt(b);
+    return`<tr><td><strong>${t?t.name:'-'}</strong></td><td>${t?t.floor:'-'}</td>
+      <td style="font-size:12px">${b.month}</td>
+      <td class="num">${fmt(b.total)}</td><td class="num col-success">${fmt(b.paid)}</td>
+      <td class="num font-bold col-danger">${fmt(unpaid)}</td>
+      <td class="text-sm" style="color:${days>0?'var(--danger)':'var(--text-muted)'}">${b.due||'-'}${days>0?` (+${days}일)`:''}</td>
+      <td><span class="badge ${st.cls}">${st.text}</span></td></tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CSV
+// ═══════════════════════════════════════════════════════════
+function dlCSV(rows,filename){
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename+'.csv';a.click();
+}
+function exportToCSV(){
+  const bills=BL();
+  const rows=[['청구월','임차인','층','유형','월세','부가세','관리비','합계','입금액','미납금','상태']];
+  bills.forEach(b=>{const t=S.tenants.find(x=>x.id===b.tid);const st=billSt(b);rows.push([b.month,t?t.name:'-',t?t.floor:'-',b.type,b.rent,b.vat,b.mgmt,b.total,b.paid,b.total-b.paid,st.text]);});
+  dlCSV(rows,'rental_'+LL().name+'_'+thisMonth());
+  showToast('CSV 내보내기 완료');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MODAL / TOAST
+// ═══════════════════════════════════════════════════════════
+function openModal(id){
+  document.getElementById(id).classList.add('show');
+  if(id==='firebaseModal') updateFBModalStatus();
+  if(id==='gsheetsModal'){ updateGSModalStatus(); if(GS.url) document.getElementById('gs_url').value=GS.url; }
+}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+function showToast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),3200);}
+
+// ═══════════════════════════════════════════════════════════
+//  INIT — 앱 시작
+// ═══════════════════════════════════════════════════════════
+(async function init(){
+  document.getElementById('billFilterMonth').value=thisMonth();
+  document.getElementById('detailMonth').value=thisMonth();
+  setSyncStatus('','로컬 모드');
+  renderSidebar();
+  renderDashboard();
+
+  // localStorage에서 GS config 복원
+  loadGSConfig();
+  if(GS.auto==='interval' && GS.url){
+    GS.timer = setInterval(()=>syncToGSheets(false), 5*60*1000);
+  }
+  updateSettingsStatus();
+
+  // Firebase config 복원 (저장된 경우 자동 연결)
+  const savedFB = loadFBConfig();
+  if(savedFB && savedFB.databaseURL){
+    document.getElementById('fb_apiKey').value    = savedFB.apiKey||'';
+    document.getElementById('fb_authDomain').value= savedFB.authDomain||'';
+    document.getElementById('fb_databaseURL').value=savedFB.databaseURL||'';
+    document.getElementById('fb_projectId').value = savedFB.projectId||'';
+    document.getElementById('fb_appId').value     = savedFB.appId||'';
+    setSyncStatus('syncing','Firebase 자동 연결 중…');
+    await initFirebase(savedFB);
+  } else {
+    setSyncStatus('','로컬 모드');
+    hideLoading();
+  }
+})();
+</script>
+</body>
+</html>
