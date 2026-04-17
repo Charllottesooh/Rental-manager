@@ -1302,17 +1302,40 @@ function jsonpCall(url, params){
   });
 }
 
-// ── no-cors fetch (내보내기 전용 — 응답 무시) ──
-async function postNoCorsFetch(url, body){
-  try {
-    await fetch(url, {
-      method: 'POST',
-      mode: 'no-cors',
-      body: JSON.stringify(body),
-      headers: { 'Content-Type': 'text/plain' }
-    });
-    return true;
-  } catch(e){ return false; }
+// ── Google Apps Script POST (hidden form 방식 — CORS 완전 우회) ──
+function postViaForm(url, data){
+  return new Promise((resolve)=>{
+    // hidden iframe 생성
+    const frameId = '_gs_frame_'+Date.now();
+    const iframe = document.createElement('iframe');
+    iframe.name = frameId;
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+
+    // hidden form 생성
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = url;
+    form.target = frameId;
+    form.style.display = 'none';
+
+    // 데이터를 JSON 문자열로 단일 필드에 담기
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'payload';
+    input.value = JSON.stringify(data);
+    form.appendChild(input);
+
+    document.body.appendChild(form);
+
+    // 완료 후 정리
+    setTimeout(()=>{
+      try { document.body.removeChild(form); document.body.removeChild(iframe); } catch(e){}
+      resolve(true);
+    }, 3000);
+
+    form.submit();
+  });
 }
 
 async function syncToGSheets(showMsg=true){
@@ -1324,15 +1347,12 @@ async function syncToGSheets(showMsg=true){
     ? [['Bills',buildBillRows(bills,tenants)],['Payments',buildPayRows(payments,tenants)]]
     : [['Tenants',buildTenantRows(tenants)],['Bills',buildBillRows(bills,tenants)],['Payments',buildPayRows(payments,tenants)]];
 
-  // no-cors로 전송 (응답 확인 불가지만 실제로 전송됨)
-  let success = true;
   for(const [sheet,rows] of sheets){
-    const ok = await postNoCorsFetch(GS.url, { action:'export', sheet, rows });
-    if(!ok) success = false;
+    await postViaForm(GS.url, { action:'export', sheet, rows });
   }
+
   if(showMsg){
-    // no-cors는 성공여부를 알 수 없어 일단 완료로 표시
-    showToast('📊 구글시트로 전송 완료 (시트에서 확인하세요)');
+    showToast('📊 구글시트 동기화 완료 — 시트에서 확인하세요');
     setSyncStatus('connected','연결됨');
   }
 }
