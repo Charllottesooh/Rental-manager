@@ -2108,10 +2108,22 @@ function showToast(msg){const el=document.getElementById('toast');el.textContent
 // ═══════════════════════════════════════════════════════════
 //  INIT — 앱 시작
 // ═══════════════════════════════════════════════════════════
+
+// ── 하드코딩된 Firebase Config (공유자 자동 연결용) ──
+const FIREBASE_CONFIG = {
+  apiKey:            'AIzaSyDHVX6OUZfaXLWQ5XFWhszmjxjD6EGopPY',
+  authDomain:        'rental-manager-d2cf9.firebaseapp.com',
+  databaseURL:       'https://rental-manager-d2cf9-default-rtdb.asia-southeast1.firebasedatabase.app',
+  projectId:         'rental-manager-d2cf9',
+  storageBucket:     'rental-manager-d2cf9.appspot.com',
+  messagingSenderId: '784452548112',
+  appId:             '1:784452548112:web:3c8acc0203bb4f0652bc95'
+};
+
 (async function init(){
   document.getElementById('billFilterMonth').value=thisMonth();
   document.getElementById('detailMonth').value=thisMonth();
-  setSyncStatus('','로컬 모드');
+  setSyncStatus('','연결 중…');
   renderSidebar();
   renderDashboard();
 
@@ -2122,20 +2134,19 @@ function showToast(msg){const el=document.getElementById('toast');el.textContent
   }
   updateSettingsStatus();
 
-  // Firebase config 복원 (저장된 경우 자동 연결)
+  // Firebase — 하드코딩 Config로 항상 자동 연결
+  // localStorage에 저장된 config가 있으면 우선 사용, 없으면 기본값 사용
   const savedFB = loadFBConfig();
-  if(savedFB && savedFB.databaseURL){
-    document.getElementById('fb_apiKey').value    = savedFB.apiKey||'';
-    document.getElementById('fb_authDomain').value= savedFB.authDomain||'';
-    document.getElementById('fb_databaseURL').value=savedFB.databaseURL||'';
-    document.getElementById('fb_projectId').value = savedFB.projectId||'';
-    document.getElementById('fb_appId').value     = savedFB.appId||'';
-    setSyncStatus('syncing','Firebase 자동 연결 중…');
-    await initFirebase(savedFB);
-  } else {
-    setSyncStatus('','로컬 모드');
-    hideLoading();
-  }
+  const fbConfig = (savedFB && savedFB.databaseURL) ? savedFB : FIREBASE_CONFIG;
+
+  document.getElementById('fb_apiKey').value     = fbConfig.apiKey||'';
+  document.getElementById('fb_authDomain').value = fbConfig.authDomain||'';
+  document.getElementById('fb_databaseURL').value= fbConfig.databaseURL||'';
+  document.getElementById('fb_projectId').value  = fbConfig.projectId||'';
+  document.getElementById('fb_appId').value      = fbConfig.appId||'';
+
+  setSyncStatus('syncing','Firebase 연결 중…');
+  await initFirebase(fbConfig);
 
   // 조회 전용 모드 적용 (반드시 마지막에)
   applyViewMode();
