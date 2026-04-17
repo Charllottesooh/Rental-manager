@@ -1318,8 +1318,8 @@ function renderSidebar(){
         <span class="sb-dot" style="background:${l.color}"></span>
         <span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.name}</span>
       </button>
-      <button class="sb-ll-action" onclick="openLandlordModal(${i})" title="수정">✎</button>
-      <button class="sb-ll-action" onclick="deleteLandlord(${i})" title="삭제" style="color:rgba(255,100,100,0.7)">✕</button>
+      <button class="sb-ll-action" onclick="openLandlordModal(${i})" title="수정" ${VIEW_ONLY?'style="display:none"':''}>✎</button>
+      <button class="sb-ll-action" onclick="deleteLandlord(${i})" title="삭제" style="color:rgba(255,100,100,0.7);${VIEW_ONLY?'display:none':''}">✕</button>
     </div>`).join('');
 }
 
@@ -1429,12 +1429,7 @@ function renderLandlordTable(){
       <td class="text-sm">${l.bizno||'-'}</td>
       <td class="text-sm" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.account||'-'}</td>
       <td style="text-align:center"><span class="badge badge-gray">${tenantCnt}명</span></td>
-      <td>
-        <div class="flex gap-8">
-          <button class="btn btn-sm" onclick="openLandlordModal(${i})">수정</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteLandlord(${i})">삭제</button>
-        </div>
-      </td>
+      <td>${VIEW_ONLY?'':`<div class="flex gap-8"><button class="btn btn-sm" onclick="openLandlordModal(${i})">수정</button><button class="btn btn-sm btn-danger" onclick="deleteLandlord(${i})">삭제</button></div>`}</td>
     </tr>`;
   }).join('');
 }
@@ -1621,7 +1616,7 @@ function renderTenants(){
     <td class="num">${fmt(t.rent)}</td><td class="num-sm">${fmt(Math.round(t.rent*0.1))}</td><td class="num">${fmt(t.mgmt)}</td>
     <td class="num">${fmt(t.deposit)}<br><span class="text-sm text-muted">${t.depositNote||''}</span></td>
     <td>${stMap[t.status]||''}</td>
-    <td><div class="flex gap-8"><button class="btn btn-sm" onclick="editTenant('${t.id}')">수정</button><button class="btn btn-sm btn-danger" onclick="deleteTenant('${t.id}')">삭제</button></div></td>
+    <td>${VIEW_ONLY?'':`<div class="flex gap-8"><button class="btn btn-sm" onclick="editTenant('${t.id}')">수정</button><button class="btn btn-sm btn-danger" onclick="deleteTenant('${t.id}')">삭제</button></div>`}</td>
   </tr>`).join('');
 }
 function openTenantModal(){
@@ -1741,7 +1736,7 @@ function renderPayments(){
   const pays=PY().sort((a,b)=>b.date.localeCompare(a.date));
   document.getElementById('paymentTableBody').innerHTML=!pays.length
     ?'<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-muted)">입금 내역 없음</td></tr>'
-    :pays.map(p=>{const t=S.tenants.find(x=>x.id===p.tid);return`<tr><td>${p.date}</td><td>${t?t.name:'-'}</td><td style="font-size:11px;color:var(--text-muted)">${p.bid}</td><td class="num">${fmt(p.amount)}</td><td class="text-sm text-muted">${p.note||'-'}</td><td><button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')">삭제</button></td></tr>`;}).join('');
+    :pays.map(p=>{const t=S.tenants.find(x=>x.id===p.tid);return`<tr><td>${p.date}</td><td>${t?t.name:'-'}</td><td style="font-size:11px;color:var(--text-muted)">${p.bid}</td><td class="num">${fmt(p.amount)}</td><td class="text-sm text-muted">${p.note||'-'}</td><td>${VIEW_ONLY?'':`<button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')">삭제</button>`}</td></tr>`;}).join('');
 }
 function openPaymentModal(){
   const tenants=TN();
@@ -1817,9 +1812,37 @@ function exportToCSV(){
 }
 
 // ═══════════════════════════════════════════════════════════
+//  VIEW-ONLY MODE (?mode=view)
+// ═══════════════════════════════════════════════════════════
+const VIEW_ONLY = new URLSearchParams(location.search).get('mode') === 'view';
+
+function applyViewMode(){
+  if(!VIEW_ONLY) return;
+
+  // 상단 헤더 버튼 숨김
+  document.querySelectorAll(
+    '.btn-primary, .btn-danger, .btn-firebase, .btn-gsheet, .btn-github'
+  ).forEach(el => el.style.display = 'none');
+
+  // 사이드바 임대인 수정/삭제 버튼 숨김
+  document.querySelectorAll('.sb-ll-action').forEach(el => el.style.display = 'none');
+
+  // 조회 전용 배지 표시
+  const badge = document.createElement('div');
+  badge.style.cssText = 'padding:4px 12px;background:#FFFBEB;color:#92400e;font-size:11px;font-weight:500;text-align:center;border-bottom:1px solid #fde68a;';
+  badge.textContent = '조회 전용 모드 — 데이터 변경 불가';
+  document.querySelector('.main').prepend(badge);
+}
+
+// ═══════════════════════════════════════════════════════════
 //  MODAL / TOAST
 // ═══════════════════════════════════════════════════════════
 function openModal(id){
+  // 조회 전용 모드에서 입력 관련 모달 차단
+  if(VIEW_ONLY && ['tenantModal','historyModal','paymentModal','billModal','landlordModal','firebaseModal','gsheetsModal'].includes(id)){
+    showToast('조회 전용 모드입니다. 데이터 변경이 불가합니다.');
+    return;
+  }
   document.getElementById(id).classList.add('show');
   if(id==='firebaseModal') updateFBModalStatus();
   if(id==='gsheetsModal'){ updateGSModalStatus(); if(GS.url) document.getElementById('gs_url').value=GS.url; }
@@ -1858,6 +1881,9 @@ function showToast(msg){const el=document.getElementById('toast');el.textContent
     setSyncStatus('','로컬 모드');
     hideLoading();
   }
+
+  // 조회 전용 모드 적용 (반드시 마지막에)
+  applyViewMode();
 })();
 </script>
 </body>
