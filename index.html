@@ -1195,7 +1195,19 @@ function setupFirebaseListeners(){
         if(col==='landlords') S.landlords = objToArr(data);
         else if(col==='tenants')  S.tenants  = objToArr(data);
         else if(col==='bills')    S.bills    = objToArr(data);
-        else if(col==='payments') S.payments = objToArr(data);
+        else if(col==='payments'){
+          S.payments = objToArr(data);
+          // 입금 변경 시 전체 임차인 청구 paid 즉시 재계산
+          const tids = [...new Set(S.payments.filter(p=>p.tid).map(p=>p.tid+'|'+p.lid))];
+          tids.forEach(key=>{
+            const [tid, lid] = key.split('|');
+            const updated = recalcBillsPaid(tid, Number(lid)||lid);
+            updated.forEach(b=>{
+              const idx = S.bills.findIndex(x=>x.id===b.id);
+              if(idx>=0) S.bills[idx] = b;
+            });
+          });
+        }
         renderSidebar();
         renderPage();
         setSyncStatus('connected','실시간 동기화 중');
@@ -1222,6 +1234,17 @@ async function loadFromFirebase(){
       if(data.tenants)   S.tenants   = objToArr(data.tenants);
       if(data.bills)     S.bills     = objToArr(data.bills);
       if(data.payments)  S.payments  = objToArr(data.payments);
+
+      // 로드 후 전체 임차인 청구 paid 재계산 (입금 누계 방식)
+      const tids = [...new Set(S.payments.filter(p=>p.tid).map(p=>p.tid+'|'+p.lid))];
+      tids.forEach(key=>{
+        const [tid, lid] = key.split('|');
+        const updated = recalcBillsPaid(tid, Number(lid)||lid);
+        updated.forEach(b=>{
+          const idx = S.bills.findIndex(x=>x.id===b.id);
+          if(idx>=0) S.bills[idx] = b;
+        });
+      });
     } else {
       // 첫 연결 시 로컬 데이터를 Firebase에 업로드
       await pushAllToFirebase();
@@ -2041,6 +2064,13 @@ function renderDetailTable(){
     return (ta?ta.floor:'').localeCompare(tb2?tb2.floor:'') || b.month.localeCompare(a.month);
   });
 
+  // 표시 전 입금 누계로 paid 재계산
+  bills = bills.map(b=>{
+    const updList=recalcBillsPaid(b.tid, b.lid);
+    const found=updList.find(x=>x.id===b.id);
+    return found ? {...b, paid: found.paid} : b;
+  });
+
   const tbody=document.getElementById('detailTableBody'), tfoot=document.getElementById('detailTableFoot');
   if(!bills.length){tbody.innerHTML='<tr><td colspan="13" style="text-align:center;padding:28px;color:var(--text-muted)">해당 기간 청구 내역 없음</td></tr>';tfoot.innerHTML='';return;}
   const groups={};
@@ -2181,7 +2211,6 @@ function removeHistory(i){S.pendingHistories.splice(i,1);renderHistoryList();}
 //  BILLS
 // ═══════════════════════════════════════════════════════════
 function renderBills(){
-  // 임차인 필터 옵션 채우기
   const tenantSel=document.getElementById('bill_filter_tenant');
   if(tenantSel && tenantSel.options.length<=1){
     const cur=tenantSel.value;
@@ -2200,13 +2229,22 @@ function renderBills(){
   if(fTo)     bills=bills.filter(b=>b.month<=fTo);
   bills=bills.sort((a,b)=>b.month.localeCompare(a.month));
 
+  // 표시 전 입금 누계로 paid 재계산 (화면 표시용)
+  const calcedBills = bills.map(b=>{
+    const updList = recalcBillsPaid(b.tid, b.lid);
+    const found = updList.find(x=>x.id===b.id);
+    return found ? {...b, paid: found.paid} : b;
+  });
+
   const badge=document.getElementById('bill_filter_badge');
-  if(badge) badge.textContent=bills.length+'건';
+  if(badge) badge.textContent=calcedBills.length+'건';
 
   const tbody=document.getElementById('billTableBody'), tfoot=document.getElementById('billTableFoot');
-  if(!bills.length){tbody.innerHTML='<tr><td colspan="12" style="text-align:center;padding:28px;color:var(--text-muted)">청구 내역 없음</td></tr>';tfoot.innerHTML='';return;}
-  const totB=bills.reduce((s,b)=>s+b.total,0),totP=bills.reduce((s,b)=>s+b.paid,0),totU=totB-totP;
-  tbody.innerHTML=bills.map(b=>{
+  if(!calcedBills.length){tbody.innerHTML='<tr><td colspan="12" style="text-align:center;padding:28px;color:var(--text-muted)">청구 내역 없음</td></tr>';tfoot.innerHTML='';return;}
+  const totB=calcedBills.reduce((s,b)=>s+b.total,0);
+  const totP=calcedBills.reduce((s,b)=>s+b.paid,0);
+  const totU=totB-totP;
+  tbody.innerHTML=calcedBills.map(b=>{
     const t=S.tenants.find(x=>x.id===b.tid);const st=billSt(b);const unpaid=b.total-b.paid;
     return`<tr>
       <td style="font-size:12px">${b.month}</td>
@@ -2221,7 +2259,7 @@ function renderBills(){
       <td>${VIEW_ONLY?'':`<div class="flex gap-8"><button class="btn btn-sm" onclick="editBill('${b.id}')">수정</button><button class="btn btn-sm btn-danger" onclick="deleteBill('${b.id}')">삭제</button></div>`}</td>
     </tr>`;
   }).join('');
-  tfoot.innerHTML=`<tr style="background:var(--surface2);font-weight:700"><td colspan="6" style="padding:9px 11px;color:var(--text-secondary)">합계 (${bills.length}건)</td><td class="num">${fmt(totB)}</td><td class="num col-success">${fmt(totP)}</td><td class="num" style="color:${totU>0?'var(--danger)':'var(--text-muted)'}">${fmt(totU)}</td><td colspan="3"></td></tr>`;
+  tfoot.innerHTML=`<tr style="background:var(--surface2);font-weight:700"><td colspan="6" style="padding:9px 11px;color:var(--text-secondary)">합계 (${calcedBills.length}건)</td><td class="num">${fmt(totB)}</td><td class="num col-success">${fmt(totP)}</td><td class="num" style="color:${totU>0?'var(--danger)':'var(--text-muted)'}">${fmt(totU)}</td><td colspan="3"></td></tr>`;
 }
 function clearBillFilter(){
   ['billFilterMonth','bill_filter_tenant','bill_filter_from','bill_filter_to'].forEach(id=>{
@@ -2411,7 +2449,12 @@ function renderUnpaid(){
   const filterFrom=document.getElementById('unpaid_filter_from')?.value||'';
   const filterTo=document.getElementById('unpaid_filter_to')?.value||'';
 
-  let bills=BL().filter(b=>b.paid<b.total);
+  let bills=BL().map(b=>{
+    // 입금 누계로 paid 재계산 후 표시
+    const updList=recalcBillsPaid(b.tid, b.lid);
+    const found=updList.find(x=>x.id===b.id);
+    return found ? {...b, paid: found.paid} : b;
+  }).filter(b=>b.paid<b.total);
   if(filterTenant) bills=bills.filter(b=>b.tid===filterTenant);
   if(filterFrom)   bills=bills.filter(b=>b.month>=filterFrom);
   if(filterTo)     bills=bills.filter(b=>b.month<=filterTo);
