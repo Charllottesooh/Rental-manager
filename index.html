@@ -620,12 +620,24 @@ function res(msg) {
     <div class="modal-body">
       <div class="form-grid">
         <div class="form-group"><label class="form-label">입금일 <span class="req">*</span></label><input type="date" id="p_date"></div>
-        <div class="form-group"><label class="form-label">임차인 <span class="req">*</span></label><select id="p_tenant"></select></div>
-        <div class="form-group"><label class="form-label">청구월 <span class="req">*</span></label><select id="p_bill"></select></div>
-        <div class="form-group"><label class="form-label">입금액 (원) <span class="req">*</span></label><input type="number" id="p_amount" placeholder="0"></div>
-        <div class="form-group" style="grid-column:span 2"><label class="form-label">비고</label><input id="p_note" placeholder="분납 1차, 일부기간 등"></div>
+        <div class="form-group"><label class="form-label">임차인 <span class="req">*</span></label><select id="p_tenant" onchange="showTenantBalance()"></select></div>
+        <div class="form-group" style="grid-column:span 2"><label class="form-label">입금액 (원) <span class="req">*</span></label><input type="number" id="p_amount" placeholder="0"></div>
+        <div class="form-group" style="grid-column:span 2"><label class="form-label">비고</label><input id="p_note" placeholder="예: 3개월치 일괄납부 등"></div>
       </div>
-      <div class="info-box" style="margin-top:12px">일부 기간·분납의 경우 실제 입금액 입력 → 미납금 자동 산정</div>
+      <div id="p_balance_info" style="margin-top:12px;padding:12px;background:var(--surface2);border-radius:var(--radius);font-size:13px;display:none">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="color:var(--text-secondary)">전체 청구 누계</span>
+          <span id="p_total_billed" class="num font-bold"></span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="color:var(--text-secondary)">전체 입금 누계</span>
+          <span id="p_total_paid" class="num col-success"></span>
+        </div>
+        <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:6px;margin-top:4px">
+          <span style="font-weight:600">현재 미납액</span>
+          <span id="p_total_unpaid" class="num col-danger font-bold"></span>
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('paymentModal')">취소</button>
@@ -905,7 +917,7 @@ function res(msg) {
       <div class="page-body">
         <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
           <table class="data-table">
-            <thead><tr><th>입금일</th><th>임차인</th><th>청구월</th><th class="num">입금액</th><th>비고</th><th>관리</th></tr></thead>
+            <thead><tr><th>입금일</th><th>임차인</th><th class="num">입금액</th><th>비고</th><th>관리</th></tr></thead>
             <tbody id="paymentTableBody"></tbody>
           </table>
         </div></div></div>
@@ -1543,51 +1555,31 @@ async function runCSVImport(){
     if(csvFiles.payments){
       const rows=parseCSV(csvFiles.payments).slice(1);
       for(const r of rows){
-        if(!r[3]&&!r[1]) continue; // 입금일과 임차인명 둘 다 없으면 스킵
+        if(!r[3]&&!r[1]) continue;
         const tName  = String(r[1]||'').trim();
         const date   = String(r[3]||'').trim();
         const amount = Number(String(r[4]||'0').replace(/,/g,''))||0;
-
-        // 임차인 매칭
+        if(!date||!amount) continue;
         const matched = S.tenants.find(t=>t.name===tName&&t.lid===ll.id);
-        const tid = matched ? matched.id : '';
-
-        // 청구ID 자동 매칭 — 입금일의 연월로 해당 임차인 청구 찾기
-        let bid = String(r[2]||'').trim();
-        if(!bid && date && tid){
-          // 입금일 기준 월 (예: 2022-08-04 → 2022-08)
-          const payMonth = date.slice(0,7);
-          // 해당 임차인의 같은 월 청구 찾기
-          let matchedBill = S.bills.find(b=>b.tid===tid && b.month===payMonth);
-          // 없으면 전월 청구 찾기 (말일 납부 케이스)
-          if(!matchedBill){
-            const prevDate = new Date(date);
-            prevDate.setMonth(prevDate.getMonth()-1);
-            const prevMonth = prevDate.toISOString().slice(0,7);
-            matchedBill = S.bills.find(b=>b.tid===tid && b.month===prevMonth);
-          }
-          if(matchedBill) bid = matchedBill.id;
-        }
-
         const pay={
           id:String(r[0]||'').trim()||genId('PAY',S.payments),
-          lid:ll.id, tid, tenantName:tName,
-          bid, date, amount,
+          lid:ll.id, tid:matched?matched.id:'',
+          tenantName:tName, bid:'',
+          date, amount,
           note:String(r[5]||'').trim()
         };
-
-        // 청구내역 납부액 업데이트
-        if(bid){
-          const bill = S.bills.find(b=>b.id===bid);
-          if(bill){
-            bill.paid = Math.min(bill.total, (bill.paid||0) + amount);
-            await fbSet('bills', bill.id, bill);
-          }
-        }
-
         const idx=S.payments.findIndex(x=>x.id===pay.id);
         if(idx>=0) S.payments[idx]=pay; else S.payments.push(pay);
         await fbSet('payments',pay.id,pay); cntP++;
+      }
+      // 입금 누계로 전체 임차인 청구 재계산
+      const tids = [...new Set(S.payments.filter(p=>p.lid===ll.id&&p.tid).map(p=>p.tid))];
+      for(const tid of tids){
+        const updatedBills = recalcBillsPaid(tid, ll.id);
+        for(const b of updatedBills){
+          const idx=S.bills.findIndex(x=>x.id===b.id);
+          if(idx>=0){S.bills[idx]=b; await fbSet('bills',b.id,b);}
+        }
       }
     }
     hideLoading(); renderSidebar(); renderPage();
@@ -1670,6 +1662,30 @@ const thisMonth=()=>new Date().toISOString().slice(0,7);
 const daysBetween=d=>Math.max(0,Math.floor((new Date()-new Date(d))/86400000));
 function genId(px,list){ const y=new Date().getFullYear(); const n=list.filter(x=>x.id&&x.id.startsWith(px+'-'+y)).length; return`${px}-${y}-${String(n+1).padStart(4,'0')}`; }
 function billSt(b){ if(b.paid<=0)return{text:'미납',cls:'badge-unpaid'}; if(b.paid>=b.total)return{text:'납부완료',cls:'badge-paid'}; return{text:'일부납부',cls:'badge-partial'}; }
+
+// ── 임차인별 누계 잔액 계산 ──
+function getTenantBalance(tid, lid){
+  const bills    = S.bills.filter(b=>b.tid===tid && b.lid===lid);
+  const payments = S.payments.filter(p=>p.tid===tid && p.lid===lid);
+  const totalBilled = bills.reduce((s,b)=>s+b.total, 0);
+  const totalPaid   = payments.reduce((s,p)=>s+p.amount, 0);
+  return { totalBilled, totalPaid, unpaid: totalBilled - totalPaid };
+}
+
+// ── 전체 청구의 paid 값을 입금 누계로 재계산 ──
+function recalcBillsPaid(tid, lid){
+  const bills    = S.bills.filter(b=>b.tid===tid && b.lid===lid)
+                          .sort((a,b)=>a.month.localeCompare(b.month));
+  const payments = S.payments.filter(p=>p.tid===tid && p.lid===lid)
+                             .sort((a,b)=>a.date.localeCompare(b.date));
+  let remaining = payments.reduce((s,p)=>s+p.amount, 0);
+  for(const bill of bills){
+    if(remaining <= 0){ bill.paid = 0; }
+    else if(remaining >= bill.total){ bill.paid = bill.total; remaining -= bill.total; }
+    else { bill.paid = remaining; remaining = 0; }
+  }
+  return bills;
+}
 
 // ═══════════════════════════════════════════════════════════
 //  SIDEBAR & LANDLORD CRUD
@@ -2148,40 +2164,71 @@ async function saveBill(){
 function renderPayments(){
   const pays=PY().sort((a,b)=>b.date.localeCompare(a.date));
   document.getElementById('paymentTableBody').innerHTML=!pays.length
-    ?'<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-muted)">입금 내역 없음</td></tr>'
-    :pays.map(p=>{const t=S.tenants.find(x=>x.id===p.tid);return`<tr><td>${p.date}</td><td>${t?t.name:(p.tenantName||'-')}</td><td style="font-size:11px;color:var(--text-muted)">${p.bid}</td><td class="num">${fmt(p.amount)}</td><td class="text-sm text-muted">${p.note||'-'}</td><td>${VIEW_ONLY?'':`<button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')">삭제</button>`}</td></tr>`;}).join('');
+    ?'<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text-muted)">입금 내역 없음</td></tr>'
+    :pays.map(p=>{const t=S.tenants.find(x=>x.id===p.tid);return`<tr>
+      <td>${p.date}</td>
+      <td>${t?t.name:(p.tenantName||'-')}</td>
+      <td class="num">${fmt(p.amount)}</td>
+      <td class="text-sm text-muted">${p.note||'-'}</td>
+      <td>${VIEW_ONLY?'':`<button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')">삭제</button>`}</td>
+    </tr>`;}).join('');
 }
 function openPaymentModal(){
   const tenants=TN();
   document.getElementById('p_tenant').innerHTML=tenants.map(t=>`<option value="${t.id}">${t.floor} · ${t.name}</option>`).join('');
-  document.getElementById('p_date').value=today();fillPaymentBills();
-  document.getElementById('p_tenant').onchange=fillPaymentBills;openModal('paymentModal');
+  document.getElementById('p_date').value=today();
+  document.getElementById('p_amount').value='';
+  document.getElementById('p_note').value='';
+  document.getElementById('p_balance_info').style.display='none';
+  showTenantBalance();
+  openModal('paymentModal');
 }
-function fillPaymentBills(){
+function showTenantBalance(){
   const tid=document.getElementById('p_tenant').value;
-  const bills=BL().filter(b=>b.tid===tid&&b.paid<b.total);
-  document.getElementById('p_bill').innerHTML=bills.length?bills.map(b=>`<option value="${b.id}">${b.month} (미납 ${fmt(b.total-b.paid)}원)</option>`).join(''):'<option value="">미납 청구 없음</option>';
+  if(!tid) return;
+  const bal=getTenantBalance(tid,LL().id);
+  document.getElementById('p_balance_info').style.display='block';
+  document.getElementById('p_total_billed').textContent=fmt(bal.totalBilled)+'원';
+  document.getElementById('p_total_paid').textContent=fmt(bal.totalPaid)+'원';
+  document.getElementById('p_total_unpaid').textContent=fmt(bal.unpaid)+'원';
 }
 async function savePayment(){
-  const tid=document.getElementById('p_tenant').value,bid=document.getElementById('p_bill').value;
-  const amt=Number(document.getElementById('p_amount').value)||0,date=document.getElementById('p_date').value;
-  if(!tid||!bid||!amt||!date){showToast('필수 항목 입력 필요');return;}
-  const pay={id:genId('PAY',S.payments),lid:LL().id,tid,bid,date,amount:amt,note:document.getElementById('p_note').value};
+  const tid=document.getElementById('p_tenant').value;
+  const amt=Number(document.getElementById('p_amount').value)||0;
+  const date=document.getElementById('p_date').value;
+  if(!tid||!amt||!date){showToast('필수 항목을 입력해주세요.');return;}
+  const pay={
+    id:genId('PAY',S.payments), lid:LL().id, tid, bid:'',
+    tenantName:S.tenants.find(x=>x.id===tid)?.name||'',
+    date, amount:amt,
+    note:document.getElementById('p_note').value
+  };
   S.payments.push(pay);
-  const b=S.bills.find(x=>x.id===bid);
-  if(b){ b.paid=Math.min(b.total,b.paid+amt); await fbSet('bills',b.id,b); }
   await fbSet('payments',pay.id,pay);
+  const updatedBills=recalcBillsPaid(tid,LL().id);
+  for(const b of updatedBills){
+    const idx=S.bills.findIndex(x=>x.id===b.id);
+    if(idx>=0){S.bills[idx]=b;await fbSet('bills',b.id,b);}
+  }
   if(GS.auto==='save') syncToGSheets(false);
-  closeModal('paymentModal');showToast('입금 저장됨');renderPayments();
+  closeModal('paymentModal');showToast('입금 저장됨');renderPayments();renderDashboard();
 }
 async function deletePayment(id){
-  if(!confirm('삭제 시 납부액이 조정됩니다. 삭제하시겠습니까?'))return;
+  if(!confirm('삭제 시 미납액이 재계산됩니다. 삭제하시겠습니까?'))return;
   const p=S.payments.find(x=>x.id===id);
-  if(p){ const b=S.bills.find(x=>x.id===p.bid); if(b){ b.paid=Math.max(0,b.paid-p.amount); await fbSet('bills',b.id,b); } }
+  const tid=p?.tid; const lid=p?.lid;
   S.payments=S.payments.filter(x=>x.id!==id);
   await fbDel('payments',id);
-  renderPayments();showToast('삭제됨');
+  if(tid){
+    const updatedBills=recalcBillsPaid(tid,lid||LL().id);
+    for(const b of updatedBills){
+      const idx=S.bills.findIndex(x=>x.id===b.id);
+      if(idx>=0){S.bills[idx]=b;await fbSet('bills',b.id,b);}
+    }
+  }
+  renderPayments();renderDashboard();showToast('삭제됨');
 }
+
 
 // ═══════════════════════════════════════════════════════════
 //  UNPAID
