@@ -1338,10 +1338,13 @@ async function syncToGSheets(showMsg=true){
   if(!GS.url){ if(showMsg) showToast('Apps Script URL을 먼저 설정하세요.'); return; }
   if(showMsg) setSyncStatus('syncing','시트 동기화 중…');
 
-  const tenants=TN(), bills=BL(), payments=PY();
+  // 전체 임대인 데이터 합산 (임대인 구분 컬럼 포함)
   const sheets = GS.scope==='bills'
-    ? [['Bills',buildBillRows(bills,tenants)],['Payments',buildPayRows(payments,tenants)]]
-    : [['Tenants',buildTenantRows(tenants)],['Bills',buildBillRows(bills,tenants)],['Payments',buildPayRows(payments,tenants)]];
+    ? [['청구내역', buildBillRows(S.bills, S.tenants)],
+       ['입금내역', buildPayRows(S.payments, S.tenants)]]
+    : [['임차인정보', buildTenantRows(S.tenants)],
+       ['청구내역',   buildBillRows(S.bills, S.tenants)],
+       ['입금내역',   buildPayRows(S.payments, S.tenants)]];
 
   let success = true;
   for(const [sheet,rows] of sheets){
@@ -1357,7 +1360,7 @@ async function syncToGSheets(showMsg=true){
 
   if(showMsg){
     if(success){
-      showToast('📊 구글시트 동기화 완료!');
+      showToast('📊 구글시트 동기화 완료! (전체 임대인)');
       setSyncStatus('connected','연결됨');
     } else {
       showToast('동기화 실패 — F12 Console 확인');
@@ -1366,18 +1369,42 @@ async function syncToGSheets(showMsg=true){
   }
 }
 
-// Google Sheets 데이터 행 빌더
+// ── 데이터 행 빌더 (임대인명 첫 컬럼 포함) ──
 function buildTenantRows(tenants){
-  return [['코드','층','임차인명','연락처','계약시작','계약종료','상태','보증금','보증금비고','월세','부가세','관리비','관리비비고'],
-    ...tenants.map(t=>[t.id,t.floor,t.name,t.phone||'',t.contractStart,t.contractEnd,t.status,t.deposit,t.depositNote||'',t.rent,Math.round(t.rent*0.1),t.mgmt,t.mgmtNote||''])];
+  const header = ['임대인','코드','층','임차인명','연락처','계약시작','계약종료','상태','보증금','보증금비고','월세','부가세','관리비','관리비비고'];
+  const rows = tenants.map(t=>{
+    const ll = S.landlords.find(l=>l.id===t.lid);
+    return [ll?ll.name:'-', t.id, t.floor, t.name, t.phone||'',
+            t.contractStart, t.contractEnd, t.status,
+            t.deposit, t.depositNote||'',
+            t.rent, Math.round(t.rent*0.1), t.mgmt, t.mgmtNote||''];
+  });
+  // 임대인별로 정렬
+  rows.sort((a,b)=>a[0].localeCompare(b[0])||a[2].localeCompare(b[2]));
+  return [header, ...rows];
 }
-function buildBillRows(bills,tenants){
-  return [['청구ID','임차인','층','청구월','유형','월세','부가세','관리비','합계','입금액','미납금','상태','납부기한','비고'],
-    ...bills.map(b=>{const t=tenants.find(x=>x.id===b.tid);const st=billSt(b);return[b.id,t?t.name:'-',t?t.floor:'-',b.month,b.type,b.rent,b.vat,b.mgmt,b.total,b.paid,b.total-b.paid,st.text,b.due||'',b.note||''];})];
+function buildBillRows(bills, tenants){
+  const header = ['임대인','청구ID','임차인','층','청구월','유형','월세','부가세','관리비','합계','입금액','미납금','상태','납부기한','비고'];
+  const rows = bills.map(b=>{
+    const t  = tenants.find(x=>x.id===b.tid);
+    const ll = S.landlords.find(l=>l.id===b.lid);
+    const st = billSt(b);
+    return [ll?ll.name:'-', b.id, t?t.name:'-', t?t.floor:'-',
+            b.month, b.type, b.rent, b.vat, b.mgmt, b.total,
+            b.paid, b.total-b.paid, st.text, b.due||'', b.note||''];
+  });
+  rows.sort((a,b)=>a[0].localeCompare(b[0])||a[4].localeCompare(b[4]));
+  return [header, ...rows];
 }
-function buildPayRows(payments,tenants){
-  return [['입금ID','임차인','청구ID','입금일','입금액','비고'],
-    ...payments.map(p=>{const t=tenants.find(x=>x.id===p.tid);return[p.id,t?t.name:'-',p.bid,p.date,p.amount,p.note||''];})];
+function buildPayRows(payments, tenants){
+  const header = ['임대인','입금ID','임차인','청구ID','입금일','입금액','비고'];
+  const rows = payments.map(p=>{
+    const t  = tenants.find(x=>x.id===p.tid);
+    const ll = S.landlords.find(l=>l.id===p.lid);
+    return [ll?ll.name:'-', p.id, t?t.name:'-', p.bid, p.date, p.amount, p.note||''];
+  });
+  rows.sort((a,b)=>a[0].localeCompare(b[0])||a[4].localeCompare(b[4]));
+  return [header, ...rows];
 }
 
 // ═══ CSV 가져오기 ═══
