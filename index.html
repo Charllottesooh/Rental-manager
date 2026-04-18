@@ -2262,7 +2262,7 @@ async function saveBill(){
     showToast('청구 생성됨');
   }
   if(GS.auto==='save') syncToGSheets(false);
-  closeModal('billModal');showToast('청구 생성됨');renderBills();
+  closeModal('billModal');renderBills();
 }
 async function editBill(id){
   const b=S.bills.find(x=>x.id===id); if(!b) return;
