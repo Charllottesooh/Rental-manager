@@ -838,18 +838,26 @@ function res(msg) {
 
         <!-- 층별 상세 탭 -->
         <div id="dash-detail" style="display:none">
-          <div class="flex items-center flex-wrap gap-8 mb-16" style="margin-bottom:14px">
-            <label style="font-size:13px;color:var(--text-secondary)">조회기간</label>
-            <select id="detailPeriod" style="width:160px" onchange="onDetailPeriodChange()">
+          <div class="flex items-center flex-wrap gap-8 mb-16" style="margin-bottom:14px;gap:10px">
+            <label style="font-size:13px;color:var(--text-secondary)">기간</label>
+            <select id="detailPeriod" style="width:150px" onchange="onDetailPeriodChange()">
               <option value="all">전체 기간</option>
               <option value="year" selected>최근 1년</option>
-              <option value="custom">기간 직접 선택</option>
+              <option value="custom">직접 선택</option>
             </select>
-            <div id="detailCustomRange" style="display:flex;gap:6px;align-items:center;display:none">
+            <div id="detailCustomRange" style="display:none;gap:6px;align-items:center">
               <input type="month" id="detailFrom" style="width:130px" onchange="renderDetailTable()">
               <span style="font-size:13px;color:var(--text-secondary)">~</span>
-              <input type="month" id="detailTo"   style="width:130px" onchange="renderDetailTable()">
+              <input type="month" id="detailTo" style="width:130px" onchange="renderDetailTable()">
             </div>
+            <label style="font-size:13px;color:var(--text-secondary)">층</label>
+            <select id="detailFloor" style="width:120px" onchange="renderDetailTable()">
+              <option value="">전체 층</option>
+            </select>
+            <label style="font-size:13px;color:var(--text-secondary)">임차인</label>
+            <select id="detailTenant" style="width:160px" onchange="renderDetailTable()">
+              <option value="">전체 임차인</option>
+            </select>
             <button class="btn btn-sm" style="margin-left:auto" onclick="exportDetailCSV()">CSV 내보내기</button>
           </div>
           <div class="card">
@@ -915,10 +923,22 @@ function res(msg) {
         <button class="btn btn-primary btn-sm" onclick="openPaymentModal()">+ 입금 입력</button>
       </div>
       <div class="page-body">
+        <!-- 필터 -->
+        <div class="flex flex-wrap gap-8 items-center mb-16" style="margin-bottom:14px;gap:10px">
+          <select id="pay_filter_tenant" style="width:180px" onchange="renderPayments()">
+            <option value="">전체 임차인</option>
+          </select>
+          <input type="month" id="pay_filter_from" style="width:135px" placeholder="시작월" onchange="renderPayments()">
+          <span style="font-size:13px;color:var(--text-secondary)">~</span>
+          <input type="month" id="pay_filter_to" style="width:135px" placeholder="종료월" onchange="renderPayments()">
+          <button class="btn btn-sm" onclick="clearPayFilter()">초기화</button>
+          <span class="badge badge-gray" id="pay_filter_badge" style="margin-left:auto"></span>
+        </div>
         <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
           <table class="data-table">
             <thead><tr><th>입금일</th><th>임차인</th><th class="num">입금액</th><th>비고</th><th>관리</th></tr></thead>
             <tbody id="paymentTableBody"></tbody>
+            <tfoot id="paymentTableFoot"></tfoot>
           </table>
         </div></div></div>
       </div>
@@ -930,10 +950,20 @@ function res(msg) {
         <div><div class="page-title">미납 현황</div><div class="page-sub">자동 산정된 미납금 현황</div></div>
       </div>
       <div class="page-body">
+        <!-- 필터 -->
+        <div class="flex flex-wrap gap-8 items-center mb-16" style="margin-bottom:14px;gap:10px">
+          <select id="unpaid_filter_tenant" style="width:180px" onchange="renderUnpaid()">
+            <option value="">전체 임차인</option>
+          </select>
+          <input type="month" id="unpaid_filter_from" style="width:135px" onchange="renderUnpaid()">
+          <span style="font-size:13px;color:var(--text-secondary)">~</span>
+          <input type="month" id="unpaid_filter_to" style="width:135px" onchange="renderUnpaid()">
+          <button class="btn btn-sm" onclick="clearUnpaidFilter()">초기화</button>
+        </div>
         <div class="metric-grid" id="unpaidMetrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:18px"></div>
         <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
           <table class="data-table">
-            <thead><tr><th>임차인</th><th>층</th><th>청구월</th><th class="num">청구액</th><th class="num">입금액</th><th class="num">미납금</th><th>납부기한 / 경과</th><th>상태</th></tr></thead>
+            <thead><tr><th>임차인</th><th>층</th><th>청구월</th><th class="num">청구액</th><th class="num">입금액</th><th class="num">미납금</th><th>납부기한</th><th>상태</th></tr></thead>
             <tbody id="unpaidTableBody"></tbody>
           </table>
         </div></div></div>
@@ -1844,7 +1874,16 @@ function switchDashTab(tab){
   document.getElementById('seg-detail').classList.toggle('active',tab==='detail');
   document.getElementById('dash-summary').style.display=tab==='summary'?'block':'none';
   document.getElementById('dash-detail').style.display=tab==='detail'?'block':'none';
-  if(tab==='detail') renderDetailTable();
+  if(tab==='detail'){
+    // 층 필터 옵션 채우기
+    const floors=[...new Set(TN().map(t=>t.floor))].sort();
+    const floorSel=document.getElementById('detailFloor');
+    floorSel.innerHTML='<option value="">전체 층</option>'+floors.map(f=>`<option value="${f}">${f}</option>`).join('');
+    // 임차인 필터 옵션 채우기
+    const tenantSel=document.getElementById('detailTenant');
+    tenantSel.innerHTML='<option value="">전체 임차인</option>'+TN().map(t=>`<option value="${t.id}">${t.floor} · ${t.name}</option>`).join('');
+    renderDetailTable();
+  }
 }
 
 function renderDashboard(){
@@ -1888,17 +1927,15 @@ function renderDashboard(){
       <div class="metric-sub">전체 ${TN().length}명</div>
     </div>`;
 
-  // 층별 요약 — 전체 기간
+  // 층별 요약 — 전체 기간 누계
   const tenants=TN().sort((a,b)=>a.floor.localeCompare(b.floor));
   const tbody=document.getElementById('floorTableBody');
   if(!tenants.length){
     tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--text-muted)">등록된 임차인 없음</td></tr>';
   } else {
     tbody.innerHTML=tenants.map(t=>{
-      const tB=BL().filter(b=>b.tid===t.id); // 전체 기간
-      const billed=tB.reduce((s,b)=>s+b.total,0);
-      const paid  =tB.reduce((s,b)=>s+b.paid, 0);
-      const unpaid=billed-paid;
+      const bal=getTenantBalance(t.id, LL().id); // 누계 방식
+      const billed=bal.totalBilled, paid=bal.totalPaid, unpaid=bal.unpaid;
       const st=unpaid>0?(unpaid<billed?{text:'일부납부',cls:'badge-partial'}:{text:'미납',cls:'badge-unpaid'}):{text:billed>0?'납부완료':'청구없음',cls:billed>0?'badge-paid':'badge-gray'};
       return`<tr>
         <td><span class="floor-badge">${t.floor}</span></td>
@@ -1912,11 +1949,10 @@ function renderDashboard(){
     }).join('');
   }
 
-  // 수납률 바 — 전체 기간
+  // 수납률 바 — 전체 기간 누계
   document.getElementById('collectionRateChart').innerHTML=TN().map(t=>{
-    const tb=BL().filter(b=>b.tid===t.id);
-    const bl=tb.reduce((s,b)=>s+b.total,0), pd=tb.reduce((s,b)=>s+b.paid,0);
-    const r=bl>0?Math.round(pd/bl*100):0;
+    const bal=getTenantBalance(t.id,LL().id);
+    const r=bal.totalBilled>0?Math.round(bal.totalPaid/bal.totalBilled*100):0;
     const c=r>=100?'var(--success)':r>50?'var(--warning)':'var(--danger)';
     return`<div style="margin-bottom:14px">
       <div class="flex justify-between" style="margin-bottom:5px">
@@ -1958,27 +1994,39 @@ function onDetailPeriodChange(){
 // 층별 상세
 function renderDetailTable(){
   const period = document.getElementById('detailPeriod')?.value || 'year';
+  const filterFloor  = document.getElementById('detailFloor')?.value  || '';
+  const filterTenant = document.getElementById('detailTenant')?.value || '';
   let bills = BL();
 
   // 기간 필터
   if(period==='year'){
-    const cutoff = new Date();
-    cutoff.setFullYear(cutoff.getFullYear()-1);
-    const cutoffStr = cutoff.toISOString().slice(0,7);
-    bills = bills.filter(b=>b.month >= cutoffStr);
+    const cutoff = new Date(); cutoff.setFullYear(cutoff.getFullYear()-1);
+    bills = bills.filter(b=>b.month >= cutoff.toISOString().slice(0,7));
     document.getElementById('detail-period-badge').textContent = '최근 1년';
   } else if(period==='custom'){
     const from = document.getElementById('detailFrom')?.value || '';
     const to   = document.getElementById('detailTo')?.value   || '';
     if(from) bills = bills.filter(b=>b.month >= from);
     if(to)   bills = bills.filter(b=>b.month <= to);
-    document.getElementById('detail-period-badge').textContent =
-      from||to ? `${from||'~'} ~ ${to||'~'}` : '전체 기간';
+    document.getElementById('detail-period-badge').textContent = from||to ? `${from||'시작'} ~ ${to||'현재'}` : '전체 기간';
   } else {
-    // 전체
     document.getElementById('detail-period-badge').textContent = '전체 기간';
   }
-  bills=bills.sort((a,b)=>{const ta=S.tenants.find(x=>x.id===a.tid),tb2=S.tenants.find(x=>x.id===b.tid);return(ta?ta.floor:'').localeCompare(tb2?tb2.floor:'')||a.month.localeCompare(b.month);});
+
+  // 층 필터
+  if(filterFloor){
+    const tids = TN().filter(t=>t.floor===filterFloor).map(t=>t.id);
+    bills = bills.filter(b=>tids.includes(b.tid));
+  }
+  // 임차인 필터
+  if(filterTenant) bills = bills.filter(b=>b.tid===filterTenant);
+
+  // 최근월 상단 정렬 (내림차순)
+  bills = bills.sort((a,b)=>{
+    const ta=S.tenants.find(x=>x.id===a.tid), tb2=S.tenants.find(x=>x.id===b.tid);
+    return (ta?ta.floor:'').localeCompare(tb2?tb2.floor:'') || b.month.localeCompare(a.month);
+  });
+
   const tbody=document.getElementById('detailTableBody'), tfoot=document.getElementById('detailTableFoot');
   if(!bills.length){tbody.innerHTML='<tr><td colspan="13" style="text-align:center;padding:28px;color:var(--text-muted)">해당 기간 청구 내역 없음</td></tr>';tfoot.innerHTML='';return;}
   const groups={};
@@ -2162,17 +2210,41 @@ async function saveBill(){
 //  PAYMENTS
 // ═══════════════════════════════════════════════════════════
 function renderPayments(){
-  const pays=PY().sort((a,b)=>b.date.localeCompare(a.date));
-  document.getElementById('paymentTableBody').innerHTML=!pays.length
+  const tenantSel=document.getElementById('pay_filter_tenant');
+  if(tenantSel && tenantSel.options.length<=1){
+    const cur=tenantSel.value;
+    tenantSel.innerHTML='<option value="">전체 임차인</option>'+
+      TN().map(t=>`<option value="${t.id}" ${t.id===cur?'selected':''}>${t.floor} · ${t.name}</option>`).join('');
+  }
+  const filterTenant=document.getElementById('pay_filter_tenant')?.value||'';
+  const filterFrom=document.getElementById('pay_filter_from')?.value||'';
+  const filterTo=document.getElementById('pay_filter_to')?.value||'';
+  let pays=PY().sort((a,b)=>b.date.localeCompare(a.date));
+  if(filterTenant) pays=pays.filter(p=>p.tid===filterTenant);
+  if(filterFrom)   pays=pays.filter(p=>p.date>=filterFrom+'-01');
+  if(filterTo)     pays=pays.filter(p=>p.date<=filterTo+'-31');
+  const badge=document.getElementById('pay_filter_badge');
+  if(badge) badge.textContent=pays.length+'건';
+  const totalAmt=pays.reduce((s,p)=>s+p.amount,0);
+  const tbody=document.getElementById('paymentTableBody');
+  const tfoot=document.getElementById('paymentTableFoot');
+  tbody.innerHTML=!pays.length
     ?'<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text-muted)">입금 내역 없음</td></tr>'
     :pays.map(p=>{const t=S.tenants.find(x=>x.id===p.tid);return`<tr>
-      <td>${p.date}</td>
-      <td>${t?t.name:(p.tenantName||'-')}</td>
+      <td>${p.date}</td><td>${t?t.name:(p.tenantName||'-')}</td>
       <td class="num">${fmt(p.amount)}</td>
       <td class="text-sm text-muted">${p.note||'-'}</td>
       <td>${VIEW_ONLY?'':`<button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')">삭제</button>`}</td>
     </tr>`;}).join('');
+  if(tfoot) tfoot.innerHTML=pays.length
+    ?`<tr style="background:var(--surface2);font-weight:700"><td colspan="2" style="padding:9px 11px;color:var(--text-secondary)">합계 (${pays.length}건)</td><td class="num">${fmt(totalAmt)}</td><td colspan="2"></td></tr>`
+    :'';
 }
+function clearPayFilter(){
+  ['pay_filter_tenant','pay_filter_from','pay_filter_to'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  renderPayments();
+}
+
 function openPaymentModal(){
   const tenants=TN();
   document.getElementById('p_tenant').innerHTML=tenants.map(t=>`<option value="${t.id}">${t.floor} · ${t.name}</option>`).join('');
@@ -2234,25 +2306,51 @@ async function deletePayment(id){
 //  UNPAID
 // ═══════════════════════════════════════════════════════════
 function renderUnpaid(){
-  const bills=BL().filter(b=>b.paid<b.total);
+  // 임차인 필터 옵션 채우기
+  const tenantSel=document.getElementById('unpaid_filter_tenant');
+  if(tenantSel && tenantSel.options.length<=1){
+    tenantSel.innerHTML='<option value="">전체 임차인</option>'+
+      TN().map(t=>`<option value="${t.id}">${t.floor} · ${t.name}</option>`).join('');
+  }
+  const filterTenant=document.getElementById('unpaid_filter_tenant')?.value||'';
+  const filterFrom=document.getElementById('unpaid_filter_from')?.value||'';
+  const filterTo=document.getElementById('unpaid_filter_to')?.value||'';
+
+  let bills=BL().filter(b=>b.paid<b.total);
+  if(filterTenant) bills=bills.filter(b=>b.tid===filterTenant);
+  if(filterFrom)   bills=bills.filter(b=>b.month>=filterFrom);
+  if(filterTo)     bills=bills.filter(b=>b.month<=filterTo);
+
   const total=bills.reduce((s,b)=>s+(b.total-b.paid),0);
   const overdue=bills.filter(b=>b.due&&new Date(b.due)<new Date());
+
   document.getElementById('unpaidMetrics').innerHTML=`
     <div class="metric-card"><div class="metric-label">미납 건수</div><div class="metric-value col-danger">${bills.length}건</div></div>
     <div class="metric-card"><div class="metric-label">미납 합계</div><div class="metric-value col-danger">${fmt(total)}<span style="font-size:13px;font-weight:400">원</span></div><div class="metric-sub">${fmtW(total)}</div></div>
     <div class="metric-card"><div class="metric-label">연체 (기한 초과)</div><div class="metric-value col-warning">${overdue.length}건</div></div>`;
+
   const tbody=document.getElementById('unpaidTableBody');
-  if(!bills.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--success)">미납 없음 — 전체 납부 완료</td></tr>';return;}
-  tbody.innerHTML=bills.sort((a,b)=>a.month.localeCompare(b.month)).map(b=>{
+  if(!bills.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--success)">미납 없음</td></tr>';return;}
+  tbody.innerHTML=bills.sort((a,b)=>b.month.localeCompare(a.month)).map(b=>{
     const t=S.tenants.find(x=>x.id===b.tid);const unpaid=b.total-b.paid;
-    const days=b.due?daysBetween(b.due):0;const st=billSt(b);
-    return`<tr><td><strong>${t?t.name:(b.tenantName||'-')}</strong></td><td>${t?t.floor:'-'}</td>
+    const st=billSt(b);
+    return`<tr>
+      <td><strong>${t?t.name:(b.tenantName||'-')}</strong></td>
+      <td>${t?t.floor:'-'}</td>
       <td style="font-size:12px">${b.month}</td>
-      <td class="num">${fmt(b.total)}</td><td class="num col-success">${fmt(b.paid)}</td>
+      <td class="num">${fmt(b.total)}</td>
+      <td class="num col-success">${fmt(b.paid)}</td>
       <td class="num font-bold col-danger">${fmt(unpaid)}</td>
-      <td class="text-sm" style="color:${days>0?'var(--danger)':'var(--text-muted)'}">${b.due||'-'}${days>0?` (+${days}일)`:''}</td>
-      <td><span class="badge ${st.cls}">${st.text}</span></td></tr>`;
+      <td class="text-sm text-muted">${b.due||'-'}</td>
+      <td><span class="badge ${st.cls}">${st.text}</span></td>
+    </tr>`;
   }).join('');
+}
+function clearUnpaidFilter(){
+  ['unpaid_filter_tenant','unpaid_filter_from','unpaid_filter_to'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+  renderUnpaid();
 }
 
 // ═══════════════════════════════════════════════════════════
