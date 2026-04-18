@@ -911,9 +911,10 @@ function res(msg) {
           <select id="bill_filter_tenant" style="width:180px" onchange="renderBills()">
             <option value="">전체 임차인</option>
           </select>
-          <input type="month" id="bill_filter_from" style="width:130px" onchange="renderBills()">
+          <input type="month" id="bill_filter_from" style="width:130px">
           <span style="font-size:13px;color:var(--text-secondary)">~</span>
-          <input type="month" id="bill_filter_to" style="width:130px" onchange="renderBills()">
+          <input type="month" id="bill_filter_to" style="width:130px">
+          <button class="btn btn-sm btn-primary" onclick="renderBills()">조회</button>
           <button class="btn btn-sm" onclick="clearBillFilter()">초기화</button>
           <span class="badge badge-gray" id="bill_filter_badge" style="margin-left:auto"></span>
         </div>
@@ -939,9 +940,10 @@ function res(msg) {
           <select id="pay_filter_tenant" style="width:180px" onchange="renderPayments()">
             <option value="">전체 임차인</option>
           </select>
-          <input type="month" id="pay_filter_from" style="width:135px" placeholder="시작월" onchange="renderPayments()">
+          <input type="month" id="pay_filter_from" style="width:135px" placeholder="시작월">
           <span style="font-size:13px;color:var(--text-secondary)">~</span>
-          <input type="month" id="pay_filter_to" style="width:135px" placeholder="종료월" onchange="renderPayments()">
+          <input type="month" id="pay_filter_to" style="width:135px" placeholder="종료월">
+          <button class="btn btn-sm btn-primary" onclick="renderPayments()">조회</button>
           <button class="btn btn-sm" onclick="clearPayFilter()">초기화</button>
           <span class="badge badge-gray" id="pay_filter_badge" style="margin-left:auto"></span>
         </div>
@@ -966,9 +968,10 @@ function res(msg) {
           <select id="unpaid_filter_tenant" style="width:180px" onchange="renderUnpaid()">
             <option value="">전체 임차인</option>
           </select>
-          <input type="month" id="unpaid_filter_from" style="width:135px" onchange="renderUnpaid()">
+          <input type="month" id="unpaid_filter_from" style="width:135px">
           <span style="font-size:13px;color:var(--text-secondary)">~</span>
-          <input type="month" id="unpaid_filter_to" style="width:135px" onchange="renderUnpaid()">
+          <input type="month" id="unpaid_filter_to" style="width:135px">
+          <button class="btn btn-sm btn-primary" onclick="renderUnpaid()">조회</button>
           <button class="btn btn-sm" onclick="clearUnpaidFilter()">초기화</button>
         </div>
         <div class="metric-grid" id="unpaidMetrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:18px"></div>
