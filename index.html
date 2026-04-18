@@ -1433,15 +1433,44 @@ function fileSelected(input,type){ if(input.files[0]) readCSVFile(input.files[0]
 
 function readCSVFile(file,type){
   if(!file.name.toLowerCase().endsWith('.csv')){ showToast('CSV 파일(.csv)만 가능합니다.'); return; }
-  const reader=new FileReader();
-  reader.onload=(e)=>{
-    csvFiles[type]=e.target.result;
+
+  const readerBin = new FileReader();
+  readerBin.onload=(e)=>{
+    const bytes = new Uint8Array(e.target.result);
+
+    // UTF-8 BOM 체크 또는 UTF-8 유효성 확인
+    let text = '';
+    let isUTF8 = false;
+
+    // UTF-8로 먼저 시도
+    try {
+      const decoded = new TextDecoder('utf-8', {fatal:true}).decode(bytes);
+      // 한글이 깨지지 않으면 UTF-8
+      if(!decoded.includes('â€') && !decoded.includes('ê°')) {
+        text = decoded;
+        isUTF8 = true;
+      }
+    } catch(e) { isUTF8 = false; }
+
+    // UTF-8 실패 시 EUC-KR로 읽기
+    if(!isUTF8){
+      try {
+        text = new TextDecoder('euc-kr').decode(bytes);
+      } catch(e2) {
+        text = new TextDecoder('cp949').decode(bytes);
+      }
+    }
+
+    // BOM 제거
+    text = text.replace(/^\uFEFF/, '');
+
+    csvFiles[type] = text;
     const zone=document.getElementById('drop-'+type);
     const lbl=document.getElementById('drop-'+type+'-label');
     if(zone) zone.classList.add('loaded');
-    if(lbl) lbl.textContent='✓ '+file.name+' ('+(file.size/1024).toFixed(1)+'KB)';
+    if(lbl) lbl.textContent='✓ '+file.name+' ('+(file.size/1024).toFixed(1)+'KB) ['+(isUTF8?'UTF-8':'EUC-KR')+']';
   };
-  reader.readAsText(file,'UTF-8');
+  readerBin.readAsArrayBuffer(file);
 }
 
 function parseCSV(text){
