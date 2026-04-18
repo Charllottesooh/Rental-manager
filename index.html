@@ -1519,12 +1519,14 @@ async function runCSVImport(){
     if(csvFiles.bills){
       const rows=parseCSV(csvFiles.bills).slice(1);
       for(const r of rows){
-        if(!r[0]) continue;
+        if(!r[3]&&!r[1]) continue; // 청구월과 임차인명 둘 다 없으면 스킵
         const tName=String(r[1]||'').trim();
         const matched=S.tenants.find(t=>t.name===tName&&t.lid===ll.id);
         const bill={
-          id:String(r[0]).trim()||genId('BL',S.bills), lid:ll.id,
-          tid:matched?matched.id:'', month:String(r[3]||'').trim(),
+          id:String(r[0]||'').trim()||genId('BL',S.bills), lid:ll.id,
+          tid:matched?matched.id:'',
+          tenantName:tName, // 매칭 안 돼도 이름 보존
+          month:String(r[3]||'').trim(),
           type:String(r[4]||'monthly').trim(),
           rent:Number(String(r[5]||'0').replace(/,/g,''))||0,
           vat:Number(String(r[6]||'0').replace(/,/g,''))||0,
@@ -1541,12 +1543,14 @@ async function runCSVImport(){
     if(csvFiles.payments){
       const rows=parseCSV(csvFiles.payments).slice(1);
       for(const r of rows){
-        if(!r[0]) continue;
+        if(!r[3]&&!r[1]) continue; // 입금일과 임차인명 둘 다 없으면 스킵
         const tName=String(r[1]||'').trim();
         const matched=S.tenants.find(t=>t.name===tName&&t.lid===ll.id);
         const pay={
-          id:String(r[0]).trim()||genId('PAY',S.payments), lid:ll.id,
-          tid:matched?matched.id:'', bid:String(r[2]||'').trim(),
+          id:String(r[0]||'').trim()||genId('PAY',S.payments), lid:ll.id,
+          tid:matched?matched.id:'',
+          tenantName:tName, // 매칭 안 돼도 이름 보존
+          bid:String(r[2]||'').trim(),
           date:String(r[3]||'').trim(),
           amount:Number(String(r[4]||'0').replace(/,/g,''))||0,
           note:String(r[5]||'').trim()
@@ -1893,7 +1897,7 @@ function renderRecentPayments(){
     ?'<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">입금 내역 없음</td></tr>'
     :pays.map(p=>{
         const t=S.tenants.find(x=>x.id===p.tid);
-        return`<tr><td>${p.date}</td><td>${t?t.name:'-'}</td><td style="font-size:12px;color:var(--text-muted)">${p.bid}</td><td class="num">${fmt(p.amount)}</td><td class="text-sm text-muted">${p.note||'-'}</td></tr>`;
+        return`<tr><td>${p.date}</td><td>${t?t.name:(p.tenantName||'-')}</td><td style="font-size:12px;color:var(--text-muted)">${p.bid}</td><td class="num">${fmt(p.amount)}</td><td class="text-sm text-muted">${p.note||'-'}</td></tr>`;
       }).join('');
 }
 
@@ -2077,7 +2081,7 @@ function renderBills(){
   const totB=bills.reduce((s,b)=>s+b.total,0),totP=bills.reduce((s,b)=>s+b.paid,0),totU=totB-totP;
   tbody.innerHTML=bills.map(b=>{
     const t=S.tenants.find(x=>x.id===b.tid);const st=billSt(b);const unpaid=b.total-b.paid;
-    return`<tr><td style="font-size:12px">${b.month}</td><td>${t?t.name:'-'}</td>
+    return`<tr><td style="font-size:12px">${b.month}</td><td>${t?t.name:(b.tenantName||'-')}</td>
       <td><span class="badge ${b.type==='partial'?'badge-partial':'badge-gray'}">${b.type==='partial'?'일부기간':'정기'}</span></td>
       <td class="num">${fmt(b.rent)}</td><td class="num-sm">${fmt(b.vat)}</td><td class="num">${fmt(b.mgmt)}</td>
       <td class="num font-bold">${fmt(b.total)}</td><td class="num col-success">${fmt(b.paid)}</td>
@@ -2115,7 +2119,7 @@ function renderPayments(){
   const pays=PY().sort((a,b)=>b.date.localeCompare(a.date));
   document.getElementById('paymentTableBody').innerHTML=!pays.length
     ?'<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-muted)">입금 내역 없음</td></tr>'
-    :pays.map(p=>{const t=S.tenants.find(x=>x.id===p.tid);return`<tr><td>${p.date}</td><td>${t?t.name:'-'}</td><td style="font-size:11px;color:var(--text-muted)">${p.bid}</td><td class="num">${fmt(p.amount)}</td><td class="text-sm text-muted">${p.note||'-'}</td><td>${VIEW_ONLY?'':`<button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')">삭제</button>`}</td></tr>`;}).join('');
+    :pays.map(p=>{const t=S.tenants.find(x=>x.id===p.tid);return`<tr><td>${p.date}</td><td>${t?t.name:(p.tenantName||'-')}</td><td style="font-size:11px;color:var(--text-muted)">${p.bid}</td><td class="num">${fmt(p.amount)}</td><td class="text-sm text-muted">${p.note||'-'}</td><td>${VIEW_ONLY?'':`<button class="btn btn-sm btn-danger" onclick="deletePayment('${p.id}')">삭제</button>`}</td></tr>`;}).join('');
 }
 function openPaymentModal(){
   const tenants=TN();
@@ -2165,7 +2169,7 @@ function renderUnpaid(){
   tbody.innerHTML=bills.sort((a,b)=>a.month.localeCompare(b.month)).map(b=>{
     const t=S.tenants.find(x=>x.id===b.tid);const unpaid=b.total-b.paid;
     const days=b.due?daysBetween(b.due):0;const st=billSt(b);
-    return`<tr><td><strong>${t?t.name:'-'}</strong></td><td>${t?t.floor:'-'}</td>
+    return`<tr><td><strong>${t?t.name:(b.tenantName||'-')}</strong></td><td>${t?t.floor:'-'}</td>
       <td style="font-size:12px">${b.month}</td>
       <td class="num">${fmt(b.total)}</td><td class="num col-success">${fmt(b.paid)}</td>
       <td class="num font-bold col-danger">${fmt(unpaid)}</td>
