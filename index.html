@@ -1544,17 +1544,47 @@ async function runCSVImport(){
       const rows=parseCSV(csvFiles.payments).slice(1);
       for(const r of rows){
         if(!r[3]&&!r[1]) continue; // 입금일과 임차인명 둘 다 없으면 스킵
-        const tName=String(r[1]||'').trim();
-        const matched=S.tenants.find(t=>t.name===tName&&t.lid===ll.id);
+        const tName  = String(r[1]||'').trim();
+        const date   = String(r[3]||'').trim();
+        const amount = Number(String(r[4]||'0').replace(/,/g,''))||0;
+
+        // 임차인 매칭
+        const matched = S.tenants.find(t=>t.name===tName&&t.lid===ll.id);
+        const tid = matched ? matched.id : '';
+
+        // 청구ID 자동 매칭 — 입금일의 연월로 해당 임차인 청구 찾기
+        let bid = String(r[2]||'').trim();
+        if(!bid && date && tid){
+          // 입금일 기준 월 (예: 2022-08-04 → 2022-08)
+          const payMonth = date.slice(0,7);
+          // 해당 임차인의 같은 월 청구 찾기
+          let matchedBill = S.bills.find(b=>b.tid===tid && b.month===payMonth);
+          // 없으면 전월 청구 찾기 (말일 납부 케이스)
+          if(!matchedBill){
+            const prevDate = new Date(date);
+            prevDate.setMonth(prevDate.getMonth()-1);
+            const prevMonth = prevDate.toISOString().slice(0,7);
+            matchedBill = S.bills.find(b=>b.tid===tid && b.month===prevMonth);
+          }
+          if(matchedBill) bid = matchedBill.id;
+        }
+
         const pay={
-          id:String(r[0]||'').trim()||genId('PAY',S.payments), lid:ll.id,
-          tid:matched?matched.id:'',
-          tenantName:tName, // 매칭 안 돼도 이름 보존
-          bid:String(r[2]||'').trim(),
-          date:String(r[3]||'').trim(),
-          amount:Number(String(r[4]||'0').replace(/,/g,''))||0,
+          id:String(r[0]||'').trim()||genId('PAY',S.payments),
+          lid:ll.id, tid, tenantName:tName,
+          bid, date, amount,
           note:String(r[5]||'').trim()
         };
+
+        // 청구내역 납부액 업데이트
+        if(bid){
+          const bill = S.bills.find(b=>b.id===bid);
+          if(bill){
+            bill.paid = Math.min(bill.total, (bill.paid||0) + amount);
+            await fbSet('bills', bill.id, bill);
+          }
+        }
+
         const idx=S.payments.findIndex(x=>x.id===pay.id);
         if(idx>=0) S.payments[idx]=pay; else S.payments.push(pay);
         await fbSet('payments',pay.id,pay); cntP++;
