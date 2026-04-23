@@ -1034,6 +1034,31 @@ function res(msg) {
               <button class="btn w-full" onclick="exportToCSV()">CSV 전체 내보내기</button>
             </div>
           </div>
+          <!-- 데이터 정리 도구 카드 -->
+          <div class="card" style="width:100%;border:1.5px solid #fca5a5">
+            <div class="card-header" style="background:#FEF2F2">
+              <div class="card-title" style="color:#DC2626">🗑 데이터 일괄 삭제 도구</div>
+            </div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+              <div class="warn-box">임차인명으로 청구/입금 내역을 검색해서 일괄 삭제합니다. 삭제 후 복구 불가합니다.</div>
+              <div class="flex gap-8 flex-wrap" style="align-items:flex-end">
+                <div class="form-group" style="flex:1;min-width:200px">
+                  <label class="form-label">삭제할 임차인명 (정확히 입력)</label>
+                  <input id="cleanup_name" placeholder="예: ㈜하나에프씨/이육림">
+                </div>
+                <div class="form-group" style="width:160px">
+                  <label class="form-label">임대인</label>
+                  <select id="cleanup_landlord"></select>
+                </div>
+                <button class="btn btn-sm" onclick="previewCleanup()" style="background:#FEF2F2;color:#DC2626;border-color:#fca5a5">검색</button>
+              </div>
+              <div id="cleanup_preview" style="display:none;background:#FEF2F2;border:1px solid #fca5a5;border-radius:8px;padding:12px;font-size:13px"></div>
+              <div id="cleanup_btns" style="display:none">
+                <button class="btn btn-danger" onclick="runCleanup()">⚠ 위 항목 전체 삭제</button>
+              </div>
+            </div>
+          </div>
+
           <!-- 공유자 카드 -->
           <div class="card" style="flex:1;min-width:280px">
             <div class="card-header"><div class="card-title">공유자 관리 (3인)</div></div>
@@ -1887,7 +1912,7 @@ function renderPage(){
   else if(S.page==='bills')    renderBills();
   else if(S.page==='payments') renderPayments();
   else if(S.page==='unpaid')   renderUnpaid();
-  else if(S.page==='settings') { updateSettingsStatus(); updateFBModalStatus(); updateGSModalStatus(); renderLandlordTable(); }
+  else if(S.page==='settings') { updateSettingsStatus(); updateFBModalStatus(); updateGSModalStatus(); renderLandlordTable(); initCleanupTool(); }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2461,8 +2486,105 @@ function clearUnpaidFilter(){
 }
 
 // ═══════════════════════════════════════════════════════════
-//  CSV
+//  데이터 정리 도구
 // ═══════════════════════════════════════════════════════════
+function initCleanupTool(){
+  const sel = document.getElementById('cleanup_landlord');
+  if(sel) sel.innerHTML = S.landlords.map((l,i)=>`<option value="${i}">${l.name}</option>`).join('');
+}
+
+function previewCleanup(){
+  const name = document.getElementById('cleanup_name').value.trim();
+  const llIdx = Number(document.getElementById('cleanup_landlord').value);
+  const ll = S.landlords[llIdx];
+  if(!name){ showToast('임차인명을 입력하세요.'); return; }
+
+  const lidStr = String(ll.id);
+
+  // 이름으로 매칭 (tenantName 또는 임차인 이름)
+  const matchBills = S.bills.filter(b=>
+    String(b.lid)===lidStr &&
+    (b.tenantName===name || S.tenants.find(t=>t.id===b.tid&&t.name===name))
+  );
+  const matchPays = S.payments.filter(p=>
+    String(p.lid)===lidStr &&
+    (p.tenantName===name || S.tenants.find(t=>t.id===p.tid&&t.name===name))
+  );
+  const matchTenants = S.tenants.filter(t=>
+    String(t.lid)===lidStr && t.name===name
+  );
+
+  const preview = document.getElementById('cleanup_preview');
+  const btns = document.getElementById('cleanup_btns');
+  preview.style.display = 'block';
+
+  const total = matchBills.length + matchPays.length + matchTenants.length;
+  if(total === 0){
+    preview.innerHTML = `<span style="color:#16A34A">✓ "${name}" 관련 데이터가 없습니다.</span>`;
+    btns.style.display = 'none';
+    return;
+  }
+
+  preview.innerHTML = `
+    <strong style="color:#DC2626">"${name}" 관련 삭제 대상 (${ll.name})</strong><br><br>
+    • 임차인: ${matchTenants.length}건<br>
+    • 청구 내역: ${matchBills.length}건<br>
+    • 입금 내역: ${matchPays.length}건<br><br>
+    <span style="color:#DC2626;font-weight:600">합계 ${total}건이 삭제됩니다. 복구 불가합니다.</span>
+  `;
+  btns.style.display = 'block';
+  // 삭제 대상 저장
+  btns.dataset.name = name;
+  btns.dataset.llIdx = llIdx;
+}
+
+async function runCleanup(){
+  const name = document.getElementById('cleanup_name').value.trim();
+  const llIdx = Number(document.getElementById('cleanup_landlord').value);
+  const ll = S.landlords[llIdx];
+  if(!name || !ll) return;
+  if(!confirm(`"${name}" 관련 데이터를 모두 삭제합니다. 복구 불가합니다. 진행하시겠습니까?`)) return;
+
+  const lidStr = String(ll.id);
+  showLoading('데이터 삭제 중…');
+
+  // 임차인 삭제
+  const delTenants = S.tenants.filter(t=>String(t.lid)===lidStr && t.name===name);
+  for(const t of delTenants){
+    S.tenants = S.tenants.filter(x=>x.id!==t.id);
+    await fbDel('tenants', t.id);
+  }
+
+  // 청구 삭제 (tenantName 또는 tid 매칭)
+  const delBills = S.bills.filter(b=>
+    String(b.lid)===lidStr &&
+    (b.tenantName===name || delTenants.find(t=>t.id===b.tid))
+  );
+  for(const b of delBills){
+    S.bills = S.bills.filter(x=>x.id!==b.id);
+    await fbDel('bills', b.id);
+  }
+
+  // 입금 삭제
+  const delPays = S.payments.filter(p=>
+    String(p.lid)===lidStr &&
+    (p.tenantName===name || delTenants.find(t=>t.id===p.tid))
+  );
+  for(const p of delPays){
+    S.payments = S.payments.filter(x=>x.id!==p.id);
+    await fbDel('payments', p.id);
+  }
+
+  hideLoading();
+  document.getElementById('cleanup_preview').innerHTML =
+    `<span style="color:#16A34A">✓ 삭제 완료 — 임차인 ${delTenants.length}건 / 청구 ${delBills.length}건 / 입금 ${delPays.length}건</span>`;
+  document.getElementById('cleanup_btns').style.display = 'none';
+  document.getElementById('cleanup_name').value = '';
+  renderSidebar(); renderPage();
+  showToast(`삭제 완료 — 총 ${delTenants.length+delBills.length+delPays.length}건`);
+}
+
+
 function dlCSV(rows,filename){
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
