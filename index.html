@@ -1708,14 +1708,15 @@ function billSt(b){ if(b.paid<=0)return{text:'미납',cls:'badge-unpaid'}; if(b.
 
 // ── 전체 청구의 paid 값을 입금 누계로 재계산 ──
 function recalcBillsPaid(tid, lid){
-  // S.bills 원본을 변경하지 않고 계산값만 반환 (불변)
+  // lid 타입 통일 (Firebase에서 숫자/문자열 혼용 방지)
+  const lidStr = String(lid);
   const bills = S.bills
-    .filter(b=>b.tid===tid && b.lid===lid)
-    .map(b=>({...b})) // 복사본
+    .filter(b=>b.tid===tid && String(b.lid)===lidStr)
+    .map(b=>({...b}))
     .sort((a,b)=>a.month.localeCompare(b.month));
   const totalPaid = S.payments
-    .filter(p=>p.tid===tid && p.lid===lid)
-    .reduce((s,p)=>s+p.amount, 0);
+    .filter(p=>p.tid===tid && String(p.lid)===lidStr)
+    .reduce((s,p)=>s+(Number(p.amount)||0), 0);
   let remaining = totalPaid;
   for(const bill of bills){
     if(remaining <= 0){ bill.paid = 0; }
@@ -1732,12 +1733,14 @@ function getBillsWithPaid(tid, lid){
 
 // 임차인 전체 잔액 (누계)
 function getTenantBalance(tid, lid){
-  const bills    = S.bills.filter(b=>b.tid===tid && b.lid===lid);
-  const payments = S.payments.filter(p=>p.tid===tid && p.lid===lid);
-  const totalBilled = bills.reduce((s,b)=>s+b.total, 0);
-  const totalPaid   = payments.reduce((s,p)=>s+p.amount, 0);
+  const lidStr = String(lid);
+  const bills    = S.bills.filter(b=>b.tid===tid && String(b.lid)===lidStr);
+  const payments = S.payments.filter(p=>p.tid===tid && String(p.lid)===lidStr);
+  const totalBilled = bills.reduce((s,b)=>s+(Number(b.total)||0), 0);
+  const totalPaid   = payments.reduce((s,p)=>s+(Number(p.amount)||0), 0);
   return { totalBilled, totalPaid, unpaid: totalBilled - totalPaid };
 }
+
 
 // ═══════════════════════════════════════════════════════════
 //  SIDEBAR & LANDLORD CRUD
