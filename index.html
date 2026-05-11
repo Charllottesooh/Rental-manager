@@ -1134,15 +1134,15 @@ let FB = {
 // localStorage에서 Firebase config 불러오기
 function loadFBConfig(){
   try {
-    const raw = localStorage.getItem('rental_fb_config');
+    const raw = localStorage.getItem('rental_fb_v2_config');
     return raw ? JSON.parse(raw) : null;
   } catch(e){ return null; }
 }
 function saveFBConfigLS(cfg){
-  localStorage.setItem('rental_fb_config', JSON.stringify(cfg));
+  localStorage.setItem('rental_fb_v2_config', JSON.stringify(cfg));
 }
 function clearFBConfigLS(){
-  localStorage.removeItem('rental_fb_config');
+  localStorage.removeItem('rental_fb_v2_config');
 }
 
 // Firebase 초기화
@@ -2643,13 +2643,13 @@ function showToast(msg){const el=document.getElementById('toast');el.textContent
 
 // ── 하드코딩된 Firebase Config (공유자 자동 연결용) ──
 const FIREBASE_CONFIG = {
-  apiKey:            'AIzaSyDHVX6OUZfaXLWQ5XFWhszmjxjD6EGopPY',
-  authDomain:        'rental-manager-d2cf9.firebaseapp.com',
-  databaseURL:       'https://rental-manager-d2cf9-default-rtdb.asia-southeast1.firebasedatabase.app',
-  projectId:         'rental-manager-d2cf9',
-  storageBucket:     'rental-manager-d2cf9.appspot.com',
-  messagingSenderId: '784452548112',
-  appId:             '1:784452548112:web:3c8acc0203bb4f0652bc95'
+  apiKey:            'AIzaSyAuA92DXYlOCP9NwupZB4euhtDDc-TJP00',
+  authDomain:        'rental-manager-v2-9933a.firebaseapp.com',
+  databaseURL:       'https://rental-manager-v2-9933a-default-rtdb.asia-southeast1.firebasedatabase.app',
+  projectId:         'rental-manager-v2-9933a',
+  storageBucket:     'rental-manager-v2-9933a.firebasestorage.app',
+  messagingSenderId: '543333903675',
+  appId:             '1:543333903675:web:7f2ea2e418a8e8af275b1e'
 };
 
 (async function init(){
