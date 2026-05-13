@@ -1171,27 +1171,32 @@ async function initFirebase(config){
 
     FB.app = firebase.initializeApp(config, 'rental-'+Date.now());
     FB.db  = FB.app.database();
+    FB.auth = FB.app.auth();
     FB.config = config;
 
+    // 익명 인증
+await FB.auth.signInAnonymously();
+console.log('✅ Firebase 익명 인증 성공, uid:', FB.auth.currentUser.uid);
+
     // .info/connected 체크 (false여도 계속 진행 — 첫 로드시 false 반환 가능)
-    await new Promise((resolve)=>{
-      const timeout = setTimeout(()=>resolve(), 5000);
-      FB.db.ref('.info/connected').once('value', snap=>{
-        clearTimeout(timeout); resolve();
-      }, ()=>{ clearTimeout(timeout); resolve(); });
-    });
+await new Promise((resolve)=>{
+  const timeout = setTimeout(()=>resolve(), 5000);
+  FB.db.ref('.info/connected').once('value', snap=>{
+    clearTimeout(timeout); resolve();
+  }, ()=>{ clearTimeout(timeout); resolve(); });
+});
 
     // 실제 DB 쓰기 테스트
-    await FB.db.ref('rental/_ping').set({ ts: Date.now() });
+await FB.db.ref('rental/_ping').set({ ts: Date.now() });
 
     FB.connected = true;
-    setSyncStatus('connected','Firebase 연결됨');
-    saveFBConfigLS(config);
-    setupFirebaseListeners();
-    await loadFromFirebase();
-    updateSettingsStatus();
-    showToast('🔥 Firebase 연결 완료! 실시간 동기화 활성화');
-    return true;
+setSyncStatus('connected','Firebase 연결됨');
+saveFBConfigLS(config);
+setupFirebaseListeners();
+await loadFromFirebase();
+updateSettingsStatus();
+showToast('🔥 Firebase 연결 완료! 실시간 동기화 활성화');
+return true;
 
   } catch(e){
     FB.connected = false;
