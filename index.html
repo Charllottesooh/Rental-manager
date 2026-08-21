@@ -1788,7 +1788,13 @@ function renderSidebar(){
     </div>`).join('');
 }
 
-function selectLL(i){ S.landlord=i; renderSidebar(); renderPage(); closeSidebar(); }
+function selectLL(i){
+  S.landlord=i;
+  // 임대인 전환 시 모든 필터 select 초기화 (다음 render에서 재생성됨)
+  ['bill_filter_tenant','pay_filter_tenant','unpaid_filter_tenant','detailTenant','detailFloor']
+    .forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; });
+  renderSidebar(); renderPage(); closeSidebar();
+}
 
 // 임대인 모달 열기 (신규 or 수정)
 let _editLLIdx = null;
@@ -2230,8 +2236,8 @@ function removeHistory(i){S.pendingHistories.splice(i,1);renderHistoryList();}
 //  BILLS
 // ═══════════════════════════════════════════════════════════
 function renderBills(){
-  const tenantSel=document.getElementById('bill_filter_tenant');
-  if(tenantSel && tenantSel.options.length<=1){
+    const tenantSel=document.getElementById('bill_filter_tenant');
+  if(tenantSel){
     const cur=tenantSel.value;
     tenantSel.innerHTML='<option value="">전체 임차인</option>'+
       TN().map(t=>`<option value="${t.id}" ${t.id===cur?'selected':''}>${t.floor} · ${t.name}</option>`).join('');
@@ -2353,8 +2359,8 @@ async function deleteBill(id){
 //  PAYMENTS
 // ═══════════════════════════════════════════════════════════
 function renderPayments(){
-  const tenantSel=document.getElementById('pay_filter_tenant');
-  if(tenantSel && tenantSel.options.length<=1){
+    const tenantSel=document.getElementById('pay_filter_tenant');
+  if(tenantSel){
     const cur=tenantSel.value;
     tenantSel.innerHTML='<option value="">전체 임차인</option>'+
       TN().map(t=>`<option value="${t.id}" ${t.id===cur?'selected':''}>${t.floor} · ${t.name}</option>`).join('');
@@ -2440,10 +2446,11 @@ async function deletePayment(id){
 // ═══════════════════════════════════════════════════════════
 function renderUnpaid(){
   // 임차인 필터 옵션 채우기
-  const tenantSel=document.getElementById('unpaid_filter_tenant');
-  if(tenantSel && tenantSel.options.length<=1){
+    const tenantSel=document.getElementById('unpaid_filter_tenant');
+  if(tenantSel){
+    const cur=tenantSel.value;
     tenantSel.innerHTML='<option value="">전체 임차인</option>'+
-      TN().map(t=>`<option value="${t.id}">${t.floor} · ${t.name}</option>`).join('');
+      TN().map(t=>`<option value="${t.id}" ${t.id===cur?'selected':''}>${t.floor} · ${t.name}</option>`).join('');
   }
   const filterTenant=document.getElementById('unpaid_filter_tenant')?.value||'';
   const filterFrom=document.getElementById('unpaid_filter_from')?.value||'';
